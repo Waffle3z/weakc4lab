@@ -100,11 +100,12 @@
      * a FOUND diagram fails the in-page check and reads as an engine fault,
      * and an UNSAT reads as a claim about the position you are now looking at.
      * Neither is recoverable once printed, so cancel instead. */
-    if (S.dsat && W.repString(moves) !== W.repString(S.moves)) {
-      stopDsat();
+    var interrupted = !!S.dsat && W.repString(moves) !== W.repString(S.moves);
+    if (interrupted) stopDsat();
+    S.moves = moves.slice();
+    if (interrupted) {
       dsatSetStatus('Stopped: the position changed while it was solving.', 'warn');
     }
-    S.moves = moves.slice();
     syncDiagram();
     invalidateLine();
   }
@@ -1062,6 +1063,9 @@
     $('btn-dsat').disabled = !redToMoveAtRoot() || !!S.dsat ||
                              !!(S.synth && S.synth.running) || simplifying;
     $('btn-dsat-stop').disabled = !S.dsat;
+    if (!S.dsat && dsatStatusRep !== null && dsatStatusRep !== W.repString(S.moves)) {
+      dsatSetStatus('');
+    }
     if (!S.dsat && !$('dsat-status').textContent.trim()) {
       var look = dsatOutlook();
       var note = $('dsat-note');
@@ -1169,10 +1173,17 @@
   var dsatWorker = null;
   var dsatBinary = null;
 
+  /* The root the message on screen is about. A verdict outlives the run that
+   * produced it, and the position can move on underneath it by half a dozen
+   * routes, so the message carries its own root rather than every one of those
+   * routes having to remember to clear it. */
+  var dsatStatusRep = null;
+
   function dsatSetStatus(text, cls) {
     var el = $('dsat-status');
     el.className = 'msg reserve' + (cls ? ' ' + cls : '');
     el.textContent = text || '';
+    dsatStatusRep = text ? W.repString(S.moves) : null;
   }
 
   /*
