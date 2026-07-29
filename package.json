@@ -1,0 +1,12 @@
+{
+  "name": "weakc4lab",
+  "version": "1.0.0",
+  "description": "Build, share, play through and exhaustively verify WeakC4 steady-state diagrams for 7x6 Connect 4.",
+  "private": true,
+  "license": "MIT",
+  "repository": "github:Waffle3z/weakc4lab",
+  "scripts": {
+    "test": "node tests/run_crosscheck.js && node tests/run_sat_tests.js && node tests/run_engine_test.js",
+    "serve": "python -m http.server 8765"
+  }
+}

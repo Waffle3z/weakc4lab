@@ -1,0 +1,696 @@
+/* WeakC4 Steady-State Lab */
+
+/* Reachable by a screen reader, absent from the layout. The page has no
+   visible header by design, so its h1 uses this. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --panel-2: #f0f1f4;
+  --ink: #1c2024;
+  --ink-dim: #60646c;
+  --ink-faint: #8b8d98;
+  --line: #d8dade;
+  --line-soft: #e6e8eb;
+  --accent: #0090ff;
+
+  --board: #1f4b8f;
+  --board-edge: #17376a;
+  --hole: #e9ebee;
+  --red: #e5484d;
+  --yellow: #ffc53d;
+
+  --lv-urgent: #d93036;
+  --lv-miai: #8e4ec6;
+  --lv-claim: #0074d9;
+  --lv-plus: #1f9254;
+  --lv-equal: #b8860b;
+  --lv-minus: #e05a0a;
+  --lv-inert: #9296a0;
+
+  --ok: #2e9c63;
+  --bad: #e5484d;
+  --warn: #d98324;
+
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101012;
+    --panel: #18191b;
+    --panel-2: #202124;
+    --ink: #eeeef0;
+    --ink-dim: #b0b4ba;
+    --ink-faint: #80838b;
+    --line: #2c2e33;
+    --line-soft: #24262a;
+
+    --board: #1b3f77;
+    --board-edge: #10264a;
+    --hole: #0c0c0e;
+
+    --lv-urgent: #ff6369;
+    --lv-claim: #52aeff;
+    --lv-plus: #4cc38a;
+    --lv-equal: #ffca4a;
+    --lv-minus: #ff8b4a;
+    --lv-miai: #b48ce8;
+
+    --ok: #4cc38a;
+    --warn: #f0b429;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2 { margin: 0; font-weight: 600; }
+a { color: var(--accent); }
+
+/* -------------------------------------------------------------- structure */
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 14px 16px;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+@media (max-width: 900px) {
+  main { grid-template-columns: minmax(0, 1fr); }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 11px 12px;
+  margin-bottom: 14px;
+}
+
+.card > h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-faint);
+  margin-bottom: 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.card > h2 .hint {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* --------------------------------------------------------------- controls */
+
+button, select, input[type="text"], textarea {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 10px;
+}
+
+button { cursor: pointer; transition: border-color .12s, opacity .12s; }
+button:hover:not(:disabled) { border-color: var(--ink-faint); }
+button:disabled { opacity: 0.4; cursor: default; }
+
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row + .row { margin-top: 8px; }
+.row.nowrap { flex-wrap: nowrap; }
+.row.nowrap input[type="text"] { min-width: 0; }
+.row.nowrap button { flex: none; }
+
+/* the board's action row keeps a fixed height so nothing below it shifts */
+.row.controls { min-height: 30px; margin-top: 7px; }
+
+.segmented {
+  display: inline-flex;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.segmented button { border: none; background: transparent; border-radius: 6px; padding: 5px 12px; color: var(--ink-dim); }
+.segmented button[aria-pressed="true"] {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.13);
+  font-weight: 500;
+}
+
+label.check { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-dim); cursor: pointer; }
+label.check input:disabled { cursor: default; }
+
+code, .mono { font-family: var(--mono); }
+
+/* ------------------------------------------------------------------ board */
+
+.files {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 0 8px;
+}
+
+.files button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  padding: 3px 0;
+  border-radius: 6px;
+}
+
+.files button:not(:disabled):hover { background: var(--panel-2); color: var(--ink); border-color: var(--line); }
+.files button:disabled { opacity: 0.35; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  /* Bound the board by the space the viewport actually has, so the page fits
+     one screen on a short display and still fills a tall one. */
+  /* Shrink to fit the viewport, but never below a usable cell size - on a very
+     short display a little scrolling beats an unreadable board. */
+  max-width: min(100%, max(322px, calc((100dvh - 528px) * 7 / 6 + 42px)));
+  margin-inline: auto;
+  gap: 5px;
+  /* Cells scale with the board, so glyphs must too - see .mk / .plyno. */
+  container-type: inline-size;
+  padding: 6px;
+  background: var(--board);
+  border: 1px solid var(--board-edge);
+  border-radius: var(--radius);
+}
+
+.cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--hole);
+  display: grid;
+  place-items: center;
+  border: 2px solid transparent;
+  cursor: default;
+  user-select: none;
+  transition: transform .08s ease;
+}
+
+.cell.clickable { cursor: pointer; }
+.cell.clickable:hover { transform: scale(1.06); }
+
+/* --- layer 1: the stone ---------------------------------------------- */
+
+.disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  z-index: 0;
+}
+
+.disc.red { background: var(--red); }
+.disc.yellow { background: var(--yellow); }
+
+/* a hypothetical stone from a counterexample line, not the root position.
+   Transparency alone carries the distinction - no extra outline needed. */
+.disc.ghost { opacity: 0.26; }
+.disc.ghost.fainter { opacity: 0.14; }
+
+/* --- layer 2: the marker, which survives any stone played over it ------ */
+
+.mk {
+  position: relative;
+  z-index: 1;
+  /* Arial, to match 2swap's visualiser, which draws its markers on canvas at
+     "24px Arial". Liberation Sans is the metric-compatible substitute where
+     Arial is absent. Monospace was the earlier choice and bought nothing here:
+     these are one-per-cell symbols, never a line of text, so there is no column
+     to align, and Arial's @ carries nearly twice the ink (96 vs 50 units wide
+     at 100px) which matters a lot inside a round cell. */
+  font-family: Arial, Helvetica, "Liberation Sans", sans-serif;
+  /* No pixel ceiling on purpose. Any fixed cap binds long before the board
+     stops growing, so the glyph shrinks relative to the cell exactly on the
+     large screens where there is most room. A container unit holds the
+     proportion at every size. */
+  font-size: 8.6cqw;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/*
+   Optical sizing. A single font-size has to fit the tallest glyph, and the set
+   is wildly uneven: measured at 100px, ink runs from @ at 96x95 down to - at
+   28x12. Left alone, three of the seven markers draw at roughly half the size
+   of the others for no reason a reader would guess.
+
+   Each is scaled so its binding ink dimension lands in the same range. - stops
+   short of full equalisation (3.43 would match @) because past about 1.9 it
+   stops reading as a dash and becomes a slab.
+
+   transform, not font-size: a bigger font-size grows the line box, which can
+   push the square cells out of shape. A transform is draw-only, so the grid
+   geometry is untouched. The ceiling is the counterexample ply badge in the
+   corner; it keeps a higher z-index and an opaque backing, so it stays legible
+   where the two meet.
+*/
+.mk.lv-claim, .mk.quiet { transform: scale(1.02); }   /* | */
+.mk.lv-urgent { transform: scale(1.30); }             /* ! */
+.mk.hole      { transform: scale(1.30); }             /* ? */
+.mk.lv-plus,
+.mk.lv-equal  { transform: scale(1.65); }             /* + = */
+.mk.lv-minus  { transform: scale(1.90); }             /* - is the smallest */
+
+.mk.quiet { color: var(--lv-inert); opacity: 0.5; font-weight: 400; }
+/* an undecided cell: visibly a placeholder, not one of the seven markers */
+.mk.hole { color: var(--accent); opacity: 0.55; font-weight: 400; }
+.mk.lv-urgent { color: var(--lv-urgent); }
+.mk.lv-miai { color: var(--lv-miai); }
+.mk.lv-claim { color: var(--lv-claim); }
+.mk.lv-plus { color: var(--lv-plus); }
+.mk.lv-equal { color: var(--lv-equal); }
+.mk.lv-minus { color: var(--lv-minus); }
+
+/* over a solid stone the level colour has no contrast, so switch to ink */
+.cell.has-disc .mk {
+  color: #16181c;
+  opacity: 1;
+  text-shadow: 0 0 3px rgb(255 255 255 / 0.6);
+}
+
+.cell:has(.disc.ghost) .mk { color: inherit; text-shadow: none; }
+.cell:has(.disc.ghost) .mk.quiet { opacity: 0.5; }
+.cell:has(.disc.ghost) .mk.lv-urgent { color: var(--lv-urgent); }
+.cell:has(.disc.ghost) .mk.lv-miai { color: var(--lv-miai); }
+.cell:has(.disc.ghost) .mk.lv-claim { color: var(--lv-claim); }
+.cell:has(.disc.ghost) .mk.lv-plus { color: var(--lv-plus); }
+.cell:has(.disc.ghost) .mk.lv-equal { color: var(--lv-equal); }
+.cell:has(.disc.ghost) .mk.lv-minus { color: var(--lv-minus); }
+
+/* --- layer 3: counterexample move number ------------------------------ */
+
+.plyno {
+  position: absolute;
+  z-index: 2;
+  right: 1px;
+  bottom: 0;
+  font-family: var(--mono);
+  font-size: min(9px, 2.4cqw);
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: 3px;
+  color: var(--ink-dim);
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+}
+
+/* --- cell states ------------------------------------------------------
+   Only three ring treatments persist, and the legend under the board names
+   whichever are currently on screen. Where a column would drop is shown on
+   hover instead, since that is the only moment it matters. */
+
+/* the move the diagram selects: solid accent ring */
+.cell.chosen { box-shadow: 0 0 0 3px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 50%, transparent); }
+
+/* the winning four */
+.cell.winline { box-shadow: 0 0 0 3px var(--ok), 0 0 14px color-mix(in srgb, var(--ok) 45%, transparent); }
+
+/* most recent move: a thin light rim, no glow */
+.cell.last { border-color: color-mix(in srgb, #fff 70%, transparent); }
+
+/* --- column hover: preview where the stone lands ---------------------- */
+
+.cell.col-hover { background: color-mix(in srgb, var(--accent) 14%, var(--hole)); }
+
+.cell.drop-target::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  z-index: 0;
+  opacity: 0.45;
+}
+
+.cell.drop-target.drop-red::before { background: var(--red); }
+.cell.drop-target.drop-yellow::before { background: var(--yellow); }
+
+/* the whole column reacts, so individual cells should not also pop */
+.cell.clickable:hover { transform: none; }
+
+/* ----------------------------------------------------------------- legend */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  min-height: 15px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.lg { display: inline-flex; align-items: center; gap: 6px; }
+
+.lg-swatch {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--hole);
+}
+
+.lg-swatch.chosen { box-shadow: 0 0 0 2px var(--accent); }
+.lg-swatch.winline { box-shadow: 0 0 0 2px var(--ok); }
+.lg-swatch.ghost { background: var(--red); opacity: 0.26; }
+
+/* -------------------------------------------------------------- verdict bar */
+
+.verdictbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  padding: 6px 10px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line-soft);
+  background: var(--panel-2);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.verdictbar .vb-mark { font-weight: 700; flex: none; width: 14px; text-align: center; }
+.verdictbar .vb-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.verdictbar.ok { border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); background: color-mix(in srgb, var(--ok) 9%, var(--panel-2)); }
+.verdictbar.ok .vb-mark { color: var(--ok); }
+.verdictbar.bad { border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); background: color-mix(in srgb, var(--bad) 9%, var(--panel-2)); }
+.verdictbar.bad .vb-mark { color: var(--bad); }
+.verdictbar.warn { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+.verdictbar.warn .vb-mark { color: var(--warn); }
+.verdictbar.idle .vb-mark, .verdictbar.idle .vb-text { color: var(--ink-faint); }
+.verdictbar.busy .vb-mark { color: var(--accent); }
+
+/* ----------------------------------------------------------------- status */
+
+.status {
+  margin-top: 7px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  min-height: 34px;          /* two lines, so ordinary changes never reflow */
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  flex: none;
+}
+
+.pill.red { color: var(--red); }
+.pill.yellow { color: var(--lv-equal); }
+.pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+
+/* ---------------------------------------------------------------- palette */
+
+/* Always exactly seven across, whatever the panel width. */
+.palette { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+
+/* Glyph over name rather than beside it. Side by side, the label was left
+   about 40px in a 55px button and "claimeven" needs 44, so two of the seven
+   names always ellipsised. Stacking gives the label the button's full width
+   and costs 10px of height, which the board absorbs through its viewport
+   formula: measured no change in page height at 1440x900 or 1366x768. */
+.palette button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 3px 2px;
+  min-width: 0;
+  background: var(--panel-2);
+  line-height: 1.2;
+}
+
+.palette button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--panel); }
+
+/* Same face as the board, so the button and the cell it paints match. */
+.palette .k { font-family: Arial, Helvetica, "Liberation Sans", sans-serif; font-size: 15px; font-weight: 700; flex: none; }
+.palette .k.faint { opacity: 0.35; }
+.palette .k.lv-urgent { color: var(--lv-urgent); }
+.palette .k.lv-miai { color: var(--lv-miai); }
+.palette .k.lv-claim { color: var(--lv-claim); }
+.palette .k.lv-plus { color: var(--lv-plus); }
+.palette .k.lv-equal { color: var(--lv-equal); }
+.palette .k.lv-minus { color: var(--lv-minus); }
+.palette .n {
+  font-size: 9.5px;
+  color: var(--ink-dim);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette .idx { display: none; }   /* the 1-7 hint lives in the card header */
+
+/* -------------------------------------------------------------- verify box */
+
+.verdict-slot { min-height: 8px; }
+
+.verdict {
+  margin-top: 10px;
+  padding: 11px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.verdict.lose { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); background: color-mix(in srgb, var(--bad) 8%, var(--panel-2)); }
+.verdict .detail { font-size: 12.5px; color: var(--ink-dim); }
+.verdict .line { font-family: var(--mono); font-size: 12.5px; margin-top: 8px; word-break: break-all; }
+
+/* ----------------------------------------------------------------- search */
+
+.statgrid {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 2px 10px;
+  margin-top: 9px;
+  font-size: 12.5px;
+  align-items: baseline;
+}
+
+.statgrid .sk { color: var(--ink-faint); }
+.statgrid .sv { font-family: var(--mono); }
+
+.spark {
+  width: 100%;
+  height: 40px;
+  margin-top: 9px;
+  display: block;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+}
+
+.sparkline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+
+/* Envelope build. Deliberately a budget gauge, not a progress bar: the
+   engine cannot know how much is left to enumerate, only how much of its
+   state ceiling it has spent. Full means overflow, not done. */
+.meter {
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width .3s linear;
+}
+
+.spark-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-faint); margin-top: 3px; }
+
+.ce {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  font-size: 12.5px;
+}
+
+.ce.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.ce.bad { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.ce-head { color: var(--ink-dim); margin-bottom: 4px; }
+.ce-line { font-family: var(--mono); word-break: break-all; }
+
+/* ------------------------------------------------------------------- misc */
+
+.log { font-family: var(--mono); font-size: 12px; height: 124px; overflow-y: auto; padding-right: 4px; }
+.log div { padding: 2px 4px; border-radius: 5px; display: flex; gap: 8px; }
+.log div:nth-child(odd) { background: var(--panel-2); }
+.log .empty { color: var(--ink-faint); background: none; font-family: inherit; }
+.log .ply { color: var(--ink-faint); min-width: 26px; }
+.log .why { color: var(--ink-dim); margin-left: auto; }
+
+textarea { width: 100%; min-height: 84px; font-family: var(--mono); font-size: 13px; resize: vertical; white-space: pre; tab-size: 2; }
+input[type="text"] { width: 100%; font-family: var(--mono); }
+.share-url { font-size: 12px; }
+
+.msg { font-size: 12.5px; color: var(--ink-dim); }
+/* reserved space, so an appearing message never moves the controls above it */
+.msg.reserve { min-height: 20px; margin-top: 6px; }
+.msg.bad { color: var(--bad); }
+.msg.ok { color: var(--ok); }
+.msg.warn { color: var(--warn); }
+
+.legend-note { font-size: 12px; color: var(--ink-faint); margin: 10px 0 0; }
+.legend-note code { font-size: 11.5px; }
+
+.hidden { display: none !important; }
+
+
+
+/* ------------------------------------------------- condensed panel pairing */
+
+/* The small panels sit two across so the page fits one screen. */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.pair .card { margin-bottom: 0; }
+
+@media (max-width: 1080px) {
+  .pair { grid-template-columns: minmax(0, 1fr); }
+  .pair .card { margin-bottom: 14px; }
+}
+
+.sub {
+  display: block;
+  margin-top: 8px;
+  margin-bottom: 3px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+/* Explanations stay available but collapsed, so prose costs no height. */
+details.help { margin-top: 9px; font-size: 11.5px; color: var(--ink-faint); }
+/* The native disclosure triangle, deliberately: a custom ::before marker had
+   to be written as a CSS escape, and the escape did not survive editing. */
+details.help > summary {
+  cursor: pointer;
+  color: var(--ink-dim);
+  user-select: none;
+}
+details.help > summary:hover { color: var(--ink); }
+details.help p { margin: 6px 0 0; line-height: 1.45; }
+details.help code { font-size: 11px; }
+
+/* --------------------------------------------------- share row and credit */
+
+.sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sub-row .sub { margin: 0; }
+
+button.mini { padding: 2px 9px; font-size: 11px; border-radius: 6px; }
+
+.credit { margin: 9px 0 0; font-size: 11px; color: var(--ink-faint); }
+.credit code { font-size: 10.5px; }
+
+/* ----------------------------------------------------------------- mobile */
+
+@media (max-width: 620px) {
+  main { padding: 10px; gap: 10px; }
+  .card { padding: 10px; margin-bottom: 10px; }
+
+  /* On a phone the board should simply use the full width. */
+  .grid { max-width: 100%; }
+
+  /* Seven labelled buttons will not fit; the glyph plus its tooltip will. */
+  .palette { gap: 4px; }
+  .palette button { justify-content: center; padding: 7px 2px; }
+  .palette .n { display: none; }
+  .palette .k { font-size: 16px; }
+
+  .statgrid { grid-template-columns: auto 1fr; }
+  .row.nowrap { flex-wrap: wrap; }
+  .log { height: 108px; }
+  .status { font-size: 12px; }
+}
+
+/* separates the in-page search from the heavy engine below it */
+.rule { border: 0; border-top: 1px solid var(--line-soft); margin: 11px 0 9px; }

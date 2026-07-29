@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WeakC4 Steady-State Lab</title>
+<meta name="description" content="Build, share, play through and exhaustively verify WeakC4 steady-state diagrams for 7x6 Connect 4.">
+
+<!-- Link previews. Text only, no og:image, so cards render as a title and a
+     line of text. Scrapers drop the #fragment, so every shared diagram link
+     previews identically; the diagram itself only appears once opened. -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="WeakC4 Steady-State Lab">
+<meta property="og:description" content="Build, share and exhaustively verify WeakC4 steady-state diagrams for 7x6 Connect 4. Runs entirely in the browser.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="WeakC4 Steady-State Lab">
+<meta name="twitter:description" content="Build, share and exhaustively verify WeakC4 steady-state diagrams for 7x6 Connect 4. Runs entirely in the browser.">
+
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231f4b8f'/><circle cx='11' cy='11' r='5' fill='%23e5484d'/><circle cx='21' cy='21' r='5' fill='%23ffc53d'/></svg>">
+</head>
+<body>
+
+<!-- The layout deliberately has no visible header, so the document's only h1
+     exists for assistive tech: without it the heading outline starts at h2. -->
+<h1 class="sr-only">WeakC4 Steady-State Lab</h1>
+
+<main>
+
+  <!-- ===================================================== left: the board -->
+  <section>
+    <div class="card board-wrap">
+      <h2>
+        Board
+        <span class="segmented" role="group" aria-label="Mode" style="margin-left:auto">
+          <button id="mode-play" aria-pressed="false">Play</button>
+          <button id="mode-edit" aria-pressed="true">Markers</button>
+          <button id="mode-setup" aria-pressed="false">Position</button>
+        </span>
+      </h2>
+
+      <div class="files" id="files"></div>
+      <div class="grid" id="grid"></div>
+
+      <!-- Live verdict. Fixed height so it never reflows what is below it. -->
+      <div class="verdictbar" id="verdictbar"></div>
+      <div class="legend" id="legend"></div>
+
+      <!-- Controls sit ABOVE the prose so a longer message cannot move them. -->
+      <div class="row controls">
+        <button id="btn-undo">Undo</button>
+        <button id="btn-root" title="Return to the root position">Root</button>
+        <button id="btn-step-red" disabled>Red's move</button>
+        <label class="check" title="Wait for you to advance Red instead of replying automatically">
+          <input type="checkbox" id="chk-step"> Pause before Red</label>
+      </div>
+
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="card" id="card-palette">
+      <h2>Markers <span class="hint">1-7 picks, right-click marks ?</span></h2>
+      <div class="palette" id="palette"></div>
+      <div class="row" style="margin-top:9px">
+        <button id="btn-fill-blank" title="Every cell back to claimeven">Clear all</button>
+        <button id="btn-clear-holes" title="Turn undecided cells into claimeven, leaving the markers you set">Clear ?</button>
+        <button id="btn-undecide-all" title="Mark every empty cell undecided, for auto-complete">Undecide all</button>
+        <button id="btn-mirror">Mirror</button>
+      </div>
+      <details class="help">
+        <summary>Priority language</summary>
+        <p>
+          Order: urgent, miai, claim, plus, equal, minus. Claimeven and claimodd
+          share one claim level. Any level exposing two cells at once is an
+          invalid diagram; uniqueness is part of the language. Miai is ignored
+          unless exactly one is exposed. An empty cell is claimeven, written as
+          a dot on disk.
+        </p>
+      </details>
+    </div>
+  </section>
+
+  <!-- ================================================== right: the panels -->
+  <aside>
+
+    <div class="card" id="card-verify">
+      <h2>Verification <span class="hint" id="verify-timing"></span></h2>
+      <div class="row">
+        <button id="btn-simplify">Simplify</button>
+        <label class="check"><input type="checkbox" id="chk-ghost" checked> Draw the losing line</label>
+      </div>
+      <div id="verdict" class="verdict-slot"></div>
+      <details class="help">
+        <summary>What is checked</summary>
+        <p>
+          Every edit is re-verified automatically. Red follows the diagram and
+          every legal Yellow reply is searched. Red must make four in a row on
+          every line. A draw, a Yellow win, or a position where the diagram names
+          no unique move all count as failures. Simplify blanks every marker that
+          is not load-bearing, which costs one verification per cell.
+        </p>
+      </details>
+    </div>
+
+    <div class="card" id="card-synth">
+      <h2>Auto-complete <span class="hint">SAT + CEGIS, in a worker</span></h2>
+      <div class="row">
+        <button id="btn-synth" class="primary">Fill undecided cells</button>
+        <button id="btn-synth-stop" disabled>Stop</button>
+      </div>
+      <div class="msg reserve" id="synth-scope"></div>
+      <div id="synth-body" class="hidden">
+        <div class="statgrid" id="synth-stats"></div>
+        <svg id="synth-spark" class="spark" viewBox="0 0 300 40" preserveAspectRatio="none"></svg>
+        <div class="spark-label">
+          <span>counterexample depth per candidate</span>
+          <span id="synth-depth"></span>
+        </div>
+        <div id="synth-ce" class="ce"></div>
+        <div class="row" id="synth-actions" style="margin-top:9px">
+          <button id="btn-synth-accept" class="primary" disabled>Keep this diagram</button>
+          <button id="btn-synth-discard" disabled>Discard</button>
+        </div>
+      </div>
+      <hr class="rule">
+      <div class="row">
+        <button id="btn-dsat">Solve whole root</button>
+        <button id="btn-dsat-stop" disabled>Stop</button>
+        <span class="msg" id="dsat-note">the native engine, ~1 MB on first use</span>
+      </div>
+      <div class="msg reserve" id="dsat-status"></div>
+      <div class="meter hidden" id="dsat-meter"><i id="dsat-meter-fill"></i></div>
+
+      <details class="help">
+        <summary>The two searches</summary>
+        <p>
+          <strong>Fill undecided cells</strong> completes the diagram on screen.
+          Every marker you have set is held fixed and only the undecided cells
+          are searched; erase a cell (right-click) to have it re-derived. Each
+          SAT model is a candidate, the exhaustive verifier turns every losing
+          line into a clause, and only a diagram that passes the full check is
+          offered.
+        </p>
+        <p>
+          <strong>It completes diagrams; it does not solve open roots.</strong>
+          Four free cells finish in about 14 candidates, ten in about 120, twelve
+          in about a thousand. A bare root with everything free ran 92,000
+          candidates without converging, and a faster solver would not change
+          that: the limit is how little each counterexample rules out, not
+          throughput. Because your markers bound the search, an UNSAT here means
+          no completion of <em>those</em> markers wins, not that the root is
+          impossible.
+        </p>
+        <p>
+          <strong>Solve whole root</strong> is the native engine, and it ignores
+          the markers on screen: it solves from the position and replaces the
+          whole diagram if it finds one. Its UNSAT is about the root itself,
+          across the entire strict language. Neither verdict has been
+          independently audited.
+        </p>
+      </details>
+    </div>
+
+    <!-- The remaining panels are small; two across keeps them off the fold. -->
+    <div class="pair">
+      <div class="card">
+        <h2>Position &amp; log</h2>
+        <div class="row nowrap">
+          <input type="text" id="rep-input" spellcheck="false" placeholder="e.g. 44444221"
+                 aria-label="Move sequence">
+          <button id="btn-clear-pos">Empty</button>
+        </div>
+        <div class="msg reserve" id="rep-note"></div>
+        <div class="log" id="log"></div>
+      </div>
+
+      <div class="card">
+        <h2>Import &amp; export</h2>
+        <textarea id="io-text" spellcheck="false" aria-label="Position, diagram or artifact to load"
+                  placeholder='Paste a node_NNNN.json artifact, a 7x6 diagram grid, or a move sequence.'></textarea>
+        <div class="row" style="margin-top:7px">
+          <button id="btn-import" class="primary">Load</button>
+          <button id="btn-export-json">JSON</button>
+          <button id="btn-export-grid">Grid</button>
+        </div>
+        <div class="msg reserve" id="io-note"></div>
+
+        <div class="sub-row">
+          <label class="sub" for="share-url">Share link</label>
+          <button id="btn-copy-link" class="mini">Copy</button>
+        </div>
+        <input type="text" id="share-url" class="share-url" readonly spellcheck="false">
+
+        <p class="credit">
+          Strict <code>SteadyState.cpp</code> semantics.
+          Analysis of <a href="https://2swap.github.io/WeakC4/explanation/" rel="noopener">2swap's WeakC4</a>.
+          <a href="https://github.com/Waffle3z/weakc4lab" rel="noopener">Source</a>.
+        </p>
+      </div>
+    </div>
+
+  </aside>
+</main>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

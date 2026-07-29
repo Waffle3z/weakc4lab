@@ -1,0 +1,50 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push supersedes whatever was running for the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      # There is no install step because there are no dependencies. The page
+      # ships as plain files and the tests use only the node standard library.
+
+      - name: Syntax
+        run: for f in *.js tests/*.js; do node --check "$f"; done
+
+      - name: Agent and verifier against the Python reference
+        run: node tests/run_crosscheck.js
+
+      - name: SAT solver and synthesizer
+        run: node tests/run_sat_tests.js
+
+      - name: WebAssembly engine
+        run: node tests/run_engine_test.js
+
+      # The engine is published to anyone who loads the page, so it must not
+      # carry the build machine's paths. tools/build_wasm.sh checks this too;
+      # repeating it here means a hand-copied artifact cannot slip through.
+      - name: No build paths in the engine
+        run: |
+          if strings -n 8 engine/dsat_7x6.wasm |
+             grep -E '([A-Za-z]:[\\/]|/home/[a-z]|/Users/)'; then
+            echo "absolute build paths found in the engine"; exit 1
+          fi
+          echo "clean"
