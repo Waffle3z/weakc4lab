@@ -347,12 +347,27 @@ of the space. Tried and rejected on evidence:
 | learnt-clause reduction (LBD) | kept. Bounds the database, 10,550 down to 4,093 learnt clauses over the same run, and stops the decay of an unbounded DB. |
 
 Neither touches the real limit. The one change that would is an **exact
-winning-move oracle**, the ingredient the native pipeline has and the browser
-does not. It turns each clause from "one of these ~120 cell/marker pairs must
-change" into "at the culprit state the diagram must pick one of these winning
-moves", a handful of literals. That needs a full Connect 4 solver in the page:
-a bitboard alpha-beta with a transposition table, tractable at ply 14 and
-deeper, and `solver.hpp` in the research repository exists to port from.
+winning-move oracle**: instead of "one of these ~86 cell/marker pairs must
+change", a clause saying "at the culprit state the diagram must pick one of
+these winning moves", which is a handful of literals rather than 41% of the
+variables.
+
+That needs a Connect 4 solver in the page, and one now ships:
+`engine/c4solver_7x6.wasm`, 13 KB, the same `solver.hpp` the research
+tooling uses. It exposes `c4_solve` and `c4_winning_moves` and keeps its
+transposition table warm between calls. Measured against the native binary
+under the same warm-table conditions, 300 weak solves at ply 8 to 29: 12,388 ms
+native against 12,746 ms in the browser, **1.03x**, with identical verdicts on
+every position.
+
+Cost is a function of depth, which is what makes this usable: about **5 ms**
+per weak solve at ply 12 and beyond, against 2.5 minutes from the empty board.
+An oracle only ever asks about positions along a counterexample line, so it
+never pays the opening price. For scale, dsat spends about a tenth of a second
+in its oracle across an 838-second run.
+
+Wiring it into the clause is not done. That is a change to the CEGIS encoding
+in `synth.js`, not to the solver.
 
 *Solve whole root* does not make this redundant. dsat solves from the position
 and ignores the markers on screen, so it cannot answer whether a particular
@@ -438,7 +453,7 @@ the semantics of his `SteadyState.cpp` from reading it; no code was copied.
 | `verify.worker.js` | verification and simplification off the main thread |
 | `synth.worker.js` | synthesis off the main thread |
 | `dsat.worker.js` | the WebAssembly engine, off the main thread |
-| `engine/` | the compiled dsat + CaDiCaL artifacts, and their provenance |
+| `engine/` | compiled engines and their provenance: `dsat` for whole roots, `c4solver` for game-tree queries |
 | `tests/` | node test runners and the Python-generated fixture |
 | `.github/workflows/ci.yml` | runs every test suite on each pull request |
 | `LICENSE` | MIT |

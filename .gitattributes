@@ -1,9 +1,11 @@
 # Normalise line endings in the repository, check out native.
 * text=auto
 
-# The engine is a build artifact whose exact bytes are recorded in
-# engine/PROVENANCE.json and checked by tests/run_engine_test.js. Line-ending
-# normalisation would rewrite the glue and break that hash on checkout, so keep
-# git away from both files entirely.
-engine/dsat_*.js -text
-engine/dsat_*.wasm binary
+# Each engine is a build artifact whose exact bytes are recorded in an
+# engine/PROVENANCE*.json and checked by tests/run_engine_test.js. Emscripten
+# emits CRLF here; normalising it would rewrite the glue and break that hash on
+# a checkout with different line endings, so keep git away from the engine
+# entirely. The patterns are deliberately wider than the engines that exist
+# today, so a third one is covered the day it lands.
+engine/*.js -text
+engine/*.wasm binary
