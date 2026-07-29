@@ -329,6 +329,23 @@
     var chosen = v.decision && v.decision.move ? v.decision.x : -1;
     var editable = S.mode === 'edit' && !v.preview;
 
+    /* "Two or more cells fire at the same level" names columns, which leaves
+     * the reader to work out which cell in each. Mark them: the offender is
+     * whichever cell that column would fill next. */
+    var clash = {};
+    /* Two sources. A clash at the root leaves a live decision; one reached down
+     * a counterexample line ends the replay instead, and replay reports that
+     * through terminal with toMove null, so no decision is ever computed. */
+    var amb = (v.decision && v.decision.kind === 'ambiguous') ? v.decision
+            : (v.terminal && v.terminal.type === 'no-move' &&
+               v.terminal.kind === 'ambiguous') ? v.terminal : null;
+    if (amb && amb.candidates) {
+      amb.candidates.forEach(function (cx) {
+        var h = W.colHeight(v.board, cx);
+        if (h < ROWS) clash[(ROWS - 1 - h) + ',' + cx] = 1;
+      });
+    }
+
     for (var yt = 0; yt < ROWS; yt++) {
       for (var x = 0; x < COLS; x++) {
         var y = ROWS - 1 - yt;
@@ -340,6 +357,11 @@
         cell.dataset.yt = yt;
 
         var titleBits = [W.cellName(x, y)];
+
+        if (clash[yt + ',' + x]) {
+          cell.classList.add('clash');
+          titleBits.push('fires at the same level as another cell');
+        }
 
         if (occ) {
           var disc = document.createElement('span');
@@ -504,7 +526,10 @@
       var p = S.synth.p;
       if (p.status === 'found') {
         pill('verified candidate', 'ok');
-        text('Candidate ' + p.iterations + '. Keep it to move it into the editor.');
+        text('Candidate ' + p.iterations +
+             (p.simplified ? ', ' + p.simplified + ' marker' + (p.simplified === 1 ? '' : 's') +
+                             ' cleared' : '') +
+             '. Keep it to move it into the editor.');
       } else {
         pill(S.synth.running ? 'searching' : 'search stopped', S.synth.running ? 'warn' : '');
         text('Candidate ' + p.iterations + (p.lastLine ? ', with its deepest counterexample behind it.' : '.'));
@@ -725,7 +750,7 @@
 
   /* Simplify is the only slow operation here - one verification per cell, over
    * up to four passes - so it is the only one that needs a stop. */
-  function startSimplify() {
+  function startSimplify(diagram, target) {
     if (!redToMoveAtRoot()) return;
     killWorker();
     if (!ensureWorker()) {
@@ -733,9 +758,11 @@
       render();
       return;
     }
-    S.busy = { key: currentKey(), kind: 'simplify', token: token };
+    S.busy = { key: currentKey(), kind: 'simplify', token: token, target: target || null };
     S.note = null;
-    worker.postMessage({ cmd: 'simplify', rep: W.repString(S.moves), diagram: S.diagram, budget: BUDGET, token: token });
+    worker.postMessage({ cmd: 'simplify', rep: W.repString(S.moves),
+                         diagram: diagram || S.diagram, budget: BUDGET,
+                         target: target || null, token: token });
     render();
   }
 
@@ -761,6 +788,18 @@
       S.busy = null;
       S.progress = null;
       if (!m.ok) { S.note = { text: m.error, cls: 'bad' }; render(); return; }
+      if (m.target === 'candidate') {
+        /* Reduce the candidate in place so Keep this diagram keeps the smaller
+         * one. setDiagram would dismiss the preview instead of updating it.
+         * The count goes on the candidate, because the preview status owns the
+         * line S.note would otherwise use. */
+        if (S.synth && S.synth.p && S.synth.p.candidate) {
+          S.synth.p.candidate = m.diagram;
+          S.synth.p.simplified = (S.synth.p.simplified || 0) + m.removed;
+        }
+        render();
+        return;
+      }
       if (wasKey === currentKey()) setDiagram(m.diagram);
       var one = m.removed === 1;
       S.note = m.removed
@@ -896,21 +935,33 @@
     /* A search candidate owns the board; its counterexample is reported by the
      * Search panel, so do not also show the editor's stale one here. */
     if (preview) {
-      btn.textContent = 'Simplify';
-      btn.classList.remove('primary');
-      btn.disabled = true;
-      btn.title = 'Finish or discard the search candidate first';
+      /* A found candidate is a verified diagram, so it can be reduced in place
+       * and kept in its reduced form. Only once the search has settled: while
+       * it runs the candidate is replaced several times a second. */
+      var settled = !!(S.synth && !S.synth.running && S.synth.p &&
+                       S.synth.p.status === 'found' && S.synth.p.candidate);
+      btn.textContent = simplifying ? 'Stop' : 'Simplify';
+      btn.classList.toggle('primary', simplifying);
+      btn.disabled = simplifying ? false : (!settled || !!S.busy);
+      btn.title = simplifying ? 'Stop simplifying'
+        : settled ? 'Blank every marker in this candidate that is not load-bearing'
+                  : 'Finish or discard the search candidate first';
       $('verify-timing').textContent = 'showing a search candidate';
       slot.innerHTML = '';
       return;
     }
 
-    btn.textContent = simplifying ? 'Stop' : 'Simplify';
+    /* The reduction is computed with the verification, so the button can say
+     * what it would do rather than making you click to find out. */
+    var cut = (fresh && v.win && v.simplify) ? v.simplify.removed : null;
+    btn.textContent = simplifying ? 'Stop' : (cut ? 'Simplify (' + cut + ')' : 'Simplify');
     btn.classList.toggle('primary', simplifying);
     btn.disabled = simplifying
       ? false
-      : (!(fresh && v.win) || !!S.busy || !!(S.synth && S.synth.running));
+      : (!(fresh && v.win) || !!S.busy || !!(S.synth && S.synth.running) || cut === 0);
     btn.title = simplifying ? 'Stop simplifying'
+      : cut ? 'Blank ' + cut + ' marker' + (cut === 1 ? '' : 's') + ' the win does not depend on'
+      : cut === 0 ? 'Every marker is load-bearing; nothing to blank'
       : (fresh && v.win ? 'Blank every marker that is not load-bearing'
                         : 'Only a verified diagram can be simplified');
 
@@ -1624,7 +1675,24 @@
         killWorker();
         S.note = { text: 'Simplify stopped; the diagram is unchanged.', cls: '' };
         render();
-      } else startSimplify();
+      } else {
+        var p = S.synth && S.synth.p;
+        if (p && !S.synth.running && p.status === 'found' && p.candidate) {
+          startSimplify(p.candidate, 'candidate');
+          return;
+        }
+        // Already computed alongside the verification: apply it directly.
+        var v = S.verify;
+        if (v && v.key === currentKey() && v.simplify && v.simplify.removed) {
+          setDiagram(v.simplify.diagram);
+          var n = v.simplify.removed;
+          S.note = { text: 'Cleared ' + n + ' marker' + (n === 1 ? '' : 's') +
+                           ' the win did not depend on.', cls: 'ok' };
+          render();
+          return;
+        }
+        startSimplify();
+      }
     };
 
     $('btn-synth').onclick = startSynth;

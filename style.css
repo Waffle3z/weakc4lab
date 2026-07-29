@@ -343,6 +343,13 @@ code, .mono { font-family: var(--mono); }
   background: color-mix(in srgb, var(--panel) 78%, transparent);
 }
 
+/* Both cells that fire at the same priority level. The verdict names the
+   columns; this says which cell in each, which is what you have to change. */
+.cell.clash {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 45%, transparent);
+}
+
 /* --- cell states ------------------------------------------------------
    Only three ring treatments persist, and the legend under the board names
    whichever are currently on screen. Where a column would drop is shown on

@@ -60,7 +60,9 @@ which one. Red and Yellow counts must be equal, since Red moves at the root.
 follows the diagram and every legal Yellow reply is searched. A win is a real
 certification. A failure is drawn onto the board as a numbered ghost line, so
 you can see how the diagram breaks while editing it. *Simplify* blanks every
-marker that is not load-bearing.
+marker that is not load-bearing; it is computed alongside the
+verification, so the button reports how many it would clear before you press
+it, and says nothing to blank when the diagram is already minimal.
 
 It is fast enough to run on every keystroke, typically single-digit
 milliseconds and rarely past a tenth of a second, so there is no re-check
