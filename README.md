@@ -316,7 +316,8 @@ run, by workload:
 | workload | SAT solve | exhaustive verify | clause build |
 |---|---:|---:|---:|
 | every cell undecided (6,988 candidates in 20 s) | **87.6%** | 2.9% | 9.5% |
-| 10 cells undecided, the rest set (solved in 123 candidates) | 4.3% | **84.2%** | 11.5% |
+| 10 cells undecided on a ply-8 root (123 candidates) | 4.3% | **84.2%** | 11.5% |
+| 14 undecided on a ply-12 root (20,178 candidates in 120 s) | **91.1%** | 5.5% | 3.4% |
 
 The two have opposite bottlenecks. A faster SAT solver attacks 87.6% of the
 first and almost none of the second, where the verifier dominates and the whole

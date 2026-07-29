@@ -1126,13 +1126,17 @@
       el.textContent = 'Nothing undecided. Right-click a cell to mark it for the solver.';
     } else if (c.empty <= 8) {
       el.textContent = c.empty + ' of ' + c.total + ' cells undecided. Well inside range.';
-    } else if (c.empty <= 14) {
+    } else if (c.empty <= 12) {
       el.textContent = c.empty + ' undecided. Expect hundreds to thousands of candidates.';
+    } else if (c.empty <= 16) {
+      /* 14 undecided on a ply-12 root took about fourteen minutes and did
+       * finish, so this is slow rather than hopeless. */
+      el.textContent = c.empty + ' undecided. Minutes, sometimes many.';
       el.classList.add('warn');
     } else {
-      el.textContent = c.empty + ' undecided. Past what this can complete: ' +
-        'decide more of them yourself first.';
-      el.classList.add('bad');
+      el.textContent = c.empty + ' undecided. Likely too wide to finish; ' +
+        'decide a few more yourself.';
+      el.classList.add('warn');
     }
   }
 
@@ -1307,11 +1311,17 @@
   function dsatOutlook() {
     if (!redToMoveAtRoot()) return { text: '', cls: '' };
     var ply = S.moves.length;
+    /* About this button only. A shallow root defeats the engine because the
+     * envelope is built over the game tree, which is enormous there; that says
+     * nothing about the completer above, which only searches the markers and is
+     * the better tool on exactly these roots. Measured on a ply-12 root: the
+     * engine ran out of memory, while the completer finished. So point at it
+     * rather than implying nothing will work. */
     if (ply >= 16) return { text: 'ply ' + ply + ': usually seconds.', cls: '' };
     if (ply >= 14) return { text: 'ply ' + ply + ': can take minutes.', cls: 'warn' };
     return {
-      text: 'ply ' + ply + ': this is the open research frontier and probably will not finish.',
-      cls: 'bad'
+      text: 'ply ' + ply + ': too large for this engine. Fill undecided cells instead.',
+      cls: 'warn'
     };
   }
 
