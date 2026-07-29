@@ -811,6 +811,16 @@
     }
 
     // verify
+    if (m.target === 'candidate') {
+      /* Measured for the preview, not for the editor's diagram: keep it off
+       * S.verify, which describes what is in the editor. */
+      S.busy = null;
+      if (S.synth && S.synth.p && S.synth.p.candidate) {
+        S.synth.p.reduce = m.simplify || { removed: 0, diagram: S.synth.p.candidate };
+      }
+      render();
+      return;
+    }
     var key = S.busy ? S.busy.key : currentKey();
     S.busy = null;
     m.key = key;
@@ -940,10 +950,13 @@
        * it runs the candidate is replaced several times a second. */
       var settled = !!(S.synth && !S.synth.running && S.synth.p &&
                        S.synth.p.status === 'found' && S.synth.p.candidate);
-      btn.textContent = simplifying ? 'Stop' : 'Simplify';
+      var pcut = settled && S.synth.p.reduce ? S.synth.p.reduce.removed : null;
+      btn.textContent = simplifying ? 'Stop' : (pcut ? 'Simplify (' + pcut + ')' : 'Simplify');
       btn.classList.toggle('primary', simplifying);
-      btn.disabled = simplifying ? false : (!settled || !!S.busy);
+      btn.disabled = simplifying ? false : (!settled || !!S.busy || pcut === 0);
       btn.title = simplifying ? 'Stop simplifying'
+        : pcut ? 'Blank ' + pcut + ' marker' + (pcut === 1 ? '' : 's') + ' this candidate does not depend on'
+        : pcut === 0 ? 'Every marker in this candidate is load-bearing'
         : settled ? 'Blank every marker in this candidate that is not load-bearing'
                   : 'Finish or discard the search candidate first';
       $('verify-timing').textContent = 'showing a search candidate';
@@ -1033,8 +1046,15 @@
       synthWorker.onmessage = function (e) {
         var p = e.data;
         S.synth.p = p;
-        if (p.status !== 'running') { S.synth.running = false; render(); }
-        else renderSoon();   // coalesce to at most one repaint per frame
+        if (p.status !== 'running') {
+          S.synth.running = false;
+          /* Measure the winner the moment it settles, so Simplify can report
+           * what it would clear instead of making you keep the diagram first
+           * to find out. Only the found case: a stopped search's candidate
+           * does not win, so there is nothing to reduce. */
+          if (p.status === 'found' && p.candidate) measureCandidate(p.candidate);
+          render();
+        } else renderSoon();   // coalesce to at most one repaint per frame
       };
       synthWorker.onerror = function (err) {
         S.synth = { running: false, p: { status: 'error', detail: 'worker failed: ' + (err.message || 'unknown') } };
@@ -1055,6 +1075,19 @@
       synthWorker = null;
     }
     if (S.synth) S.synth.running = false;
+  }
+
+  /* The candidate is not S.diagram, so it cannot ride the normal auto-verify.
+   * Safe to borrow the worker here: auto-verify is skipped while any cell is
+   * undecided, which is exactly when a search can be running. */
+  function measureCandidate(candidate) {
+    if (!redToMoveAtRoot()) return;
+    if (S.busy) return;
+    var w = ensureWorker();
+    if (!w) return;
+    S.busy = { key: currentKey(), kind: 'verify', token: token, target: 'candidate' };
+    w.postMessage({ cmd: 'verify', rep: W.repString(S.moves), diagram: candidate,
+                    budget: BUDGET, target: 'candidate', token: token });
   }
 
   /* A finished search keeps its candidate on the board so it can be kept or
@@ -1678,7 +1711,12 @@
       } else {
         var p = S.synth && S.synth.p;
         if (p && !S.synth.running && p.status === 'found' && p.candidate) {
-          startSimplify(p.candidate, 'candidate');
+          if (p.reduce && p.reduce.removed) {
+            p.candidate = p.reduce.diagram;
+            p.simplified = (p.simplified || 0) + p.reduce.removed;
+            p.reduce = { removed: 0, diagram: p.candidate };
+            render();
+          } else startSimplify(p.candidate, 'candidate');
           return;
         }
         // Already computed alongside the verification: apply it directly.

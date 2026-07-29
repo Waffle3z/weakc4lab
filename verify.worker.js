@@ -44,6 +44,7 @@ function verify(msg) {
     res.simplify = { removed: r.removed, diagram: r.diagram };
   }
   res.type = 'verify';
+  res.target = msg.target || null;
   res.ms = now() - t0;
   res.token = msg.token;
   self.postMessage(res);
