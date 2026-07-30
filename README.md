@@ -352,45 +352,67 @@ it running overnight finds nothing that a few minutes would not.
 
 The bottleneck is measured, not guessed. Each clause carries roughly 120
 literals out of 224 variables, so one counterexample removes a vanishing slice
-of the space. Tried and rejected on evidence:
+of the space. Everything tried against that, and what the evidence said:
 
 | change | result |
 |---|---|
 | harvest 8/24/48 counterexamples, keep the shallowest | within noise on throughput and repair difficulty, and costs extra search per candidate. Left off. |
 | learnt-clause reduction (LBD) | kept. Bounds the database, 10,550 down to 4,093 learnt clauses over the same run, and stops the decay of an unbounded DB. |
+| an **exact winning-move oracle** in the clause: "at the culprit state the diagram must pick one of these winning moves" in place of "one of these ~86 cell/marker pairs must change" | median clause 86 literals down to 80, and about 6% slower for 869,618 solver calls. Reverted. |
+| **"exactly one marker fires"** as a structural constraint, so an ambiguous diagram is never proposed at all | unsound as posed. Reverted. |
+| **scrambling the saved SAT phases** (described under *Auto-complete*) | kept, and the only one that mattered. |
 
-Neither touches the real limit. The one change that would is an **exact
-winning-move oracle**: instead of "one of these ~86 cell/marker pairs must
-change", a clause saying "at the culprit state the diagram must pick one of
-these winning moves", which is a handful of literals rather than 41% of the
-variables.
+The two clause changes are the interesting failures, because both look
+obviously right. The oracle misses because of what the counterexamples actually
+are. Over one 60-second run on a ply-12 root:
 
-That needs a Connect 4 solver in the page, and one now ships:
-`engine/c4solver_7x6.wasm`, 13 KB, the same `solver.hpp` the research
-tooling uses. It exposes `c4_solve` and `c4_winning_moves` and keeps its
-transposition table warm between calls. Measured against the native binary
-under the same warm-table conditions, 300 weak solves at ply 8 to 29: 12,388 ms
-native against 12,746 ms in the browser, **1.03x**, with identical verdicts on
-every position.
+| the counterexample was | count |
+|---|---:|
+| the diagram naming no move | 70,319 |
+| two or more cells firing at once | 26,245 |
+| Red playing a losing move | 8,454 |
+| the line drawing | 1,846 |
 
-Cost is a function of depth, which is what makes this usable: about **5 ms**
-per weak solve at ply 12 and beyond, against 2.5 minutes from the empty board.
-An oracle only ever asks about positions along a counterexample line, so it
-never pays the opening price. For scale, dsat spends about a tenth of a second
-in its oracle across an 838-second run.
+**90% are the diagram naming no unique move**, not the diagram playing a losing
+one. Two thirds of the losing lines therefore have no culprit for an oracle to
+point at, and where there is one it sits about three quarters of the way along,
+so cutting there saves roughly one decision in eleven. "Was that move losing" is
+the right question for dsat, whose per-state encoding makes ambiguity
+unsatisfiable by construction, and the wrong one here.
 
-Wiring it into the clause is not done. That is a change to the CEGIS encoding
-in `synth.js`, not to the solver.
+Forbidding ambiguity structurally is the right idea, and the circuit for it is
+correct: pin all 42 cells to a known winning diagram, constrain every frontier
+it reaches, and the instance stays SAT. What fails is saying *where* the
+constraint applies. It is naturally keyed by height profile, since that is what
+determines the exposed cells, but the profile does not determine whether the
+state is quiet — on one root, 939 of 2,838 profiles reached occur as both quiet
+and tactical states — so it forces a unique move where the rules do not require
+one, and excludes valid diagrams. The `synth repair` test catches it at once.
 
-*Solve whole root* does not make this redundant. dsat solves from the position
-and ignores the markers on screen, so it cannot answer whether a particular
-partial diagram extends to a winning one, which is the question someone
-building a diagram by hand is actually asking.
+Saying it properly needs a reachability variable per state, asserted only for
+the quiet states a diagram actually reaches. That is dsat's encoding, and dsat
+already exists. The weak clause is not a bug in the in-page search to be fixed
+by a better constraint; it is the price of an encoding with 210 variables and
+no state space.
 
-Until that happens, treat the in-page search as a diagram completer, not a
-solver: on a ply-16 root, four undecided cells solve in about 20 candidates and
-twelve in about 560, while a root with everything undecided does not converge at
-all.
+The Connect 4 solver built for the oracle ships anyway:
+`engine/c4solver_7x6.wasm`, 13 KB, the same `solver.hpp` the research tooling
+uses, exposing `c4_solve` and `c4_winning_moves` and keeping its transposition
+table warm between calls. Measured against the native binary under the same
+warm-table conditions, 300 weak solves at ply 8 to 29: 12,388 ms native against
+12,746 ms in the browser, **1.03x**, with identical verdicts on every position.
+Cost is a function of depth: about **5 ms** per weak solve at ply 12 and beyond,
+against 2.5 minutes from the empty board. Nothing in the page loads it; the
+test suite is what exercises it.
+
+*Solve whole root* is not a substitute for the in-page search. dsat solves from
+the position and ignores the markers on screen, so it cannot answer whether a
+particular partial diagram extends to a winning one, which is the question
+someone building a diagram by hand is actually asking.
+
+So treat the in-page search as a diagram completer, not a solver: on a ply-16
+root, four undecided cells solve in about 20 candidates and twelve in about 560,
+while a root with everything undecided does not converge at all.
 
 An UNSAT verdict here is sound with respect to the clauses it accumulated, but
 it is not an audited impossibility proof, and it is bounded by whichever
