@@ -80,7 +80,7 @@ console.log(`random 3-SAT : 600 instances (${satAgree} sat, ${unsatAgree} unsat)
 /* --------------------------------------------- clause deletion, under load */
 /*
  * maxLearnts starts at 8000, so nothing above ever triggers reduceDB and the
- * whole delete-and-reattach path used to ship untested. It is the most
+ * whole delete-and-reattach path would otherwise go untested. It is the most
  * dangerous code in the file: a lost watch or a deleted clause still cited as
  * a reason would corrupt propagation, and a wrong UNSAT is reported to the
  * user as a conclusion rather than being re-verified downstream.

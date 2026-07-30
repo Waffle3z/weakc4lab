@@ -93,6 +93,7 @@
 
     this.iterations = 0;
     this.jumps = 0;
+    this.lastJump = 0;
     this.clausesAdded = 0;
     this.bestDepth = 0;
     this.history = [];          // counterexample depth per iteration
@@ -307,6 +308,7 @@
     var ph = this.solver.phase;
     for (var v = 0; v < ph.length; v++) ph[v] = this._next() < 0.5;
     this.jumps++;
+    this.lastJump = this.iterations;
   };
 
   /** One iteration. Returns a progress record; check `this.status`. */
@@ -316,9 +318,14 @@
     /* Scramble before the solve, never after: addClause backtracks to level 0
      * and cancelUntil saves the phase of every variable it unassigns, so a
      * scramble later in the step is overwritten by the model that is about to
-     * be discarded anyway. */
+     * be discarded anyway.
+     *
+     * The trigger is the gap since the last scramble rather than a modulus on
+     * the counter, because iterations only advances on a sat verdict: a run of
+     * budget-exhausted solves sits on one count and would scramble every
+     * single step. */
     if (this.diversifyEvery && this.iterations &&
-        this.iterations % this.diversifyEvery === 0) this.diversify();
+        this.iterations - this.lastJump >= this.diversifyEvery) this.diversify();
 
     var verdict = this.solver.solve({ maxConflicts: this.satBudget });
     if (verdict === 'unsat') {

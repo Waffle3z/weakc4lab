@@ -95,17 +95,7 @@
   }
 
   function setMoves(moves) {
-    /* A dsat run is about one root. Change the position under it and its
-     * verdict becomes a statement about a board that is no longer on screen:
-     * a FOUND diagram fails the in-page check and reads as an engine fault,
-     * and an UNSAT reads as a claim about the position you are now looking at.
-     * Neither is recoverable once printed, so cancel instead. */
-    var interrupted = !!S.dsat && W.repString(moves) !== W.repString(S.moves);
-    if (interrupted) stopDsat();
     S.moves = moves.slice();
-    if (interrupted) {
-      dsatSetStatus('Stopped: the position changed while it was solving.', 'warn');
-    }
     syncDiagram();
     invalidateLine();
   }
@@ -1040,7 +1030,7 @@
      * the seed only biases the empty cells, and starting from what is on screen
      * is never worse than starting from nothing. */
     var payload = { cmd: 'start', moves: S.moves, seed: S.diagram, locked: locks };
-    S.synth = { running: true, p: null };
+    S.synth = { running: true, p: null, rep: W.repString(S.moves) };
     try {
       synthWorker = new Worker('synth.worker.js');
       synthWorker.onmessage = function (e) {
@@ -1285,6 +1275,10 @@
 
   function dsatPaintPhase() {
     if (!S.dsat || !S.dsat.phase) return;
+    /* dsatSetStatus stamps the current root onto whatever it writes, so a
+     * ticker left running would re-tag old progress with the new position once
+     * a second and the staleness check would never fire. */
+    if (S.dsat.rep !== W.repString(S.moves)) return;
     var s = Math.round((Date.now() - S.dsat.t0) / 1000);
     dsatSetStatus(S.dsat.phase + (s >= 1 ? '  ' + s + 's' : ''), S.dsat.phaseCls);
   }
@@ -1409,9 +1403,9 @@
       dsatMeter(null);
     }
 
-    /* The envelope build, previously a silent stretch of unknown length. The
-     * gauge is budget spent, not work done: the engine has no denominator for
-     * how much is left, so calling it progress would be a lie. */
+    /* The envelope build, which is otherwise a silent stretch of unknown
+     * length. The gauge is budget spent, not work done: the engine has no
+     * denominator for how much is left, so calling it progress would be a lie. */
     if (j.status === 'ENCODING') {
       dsatMeter(j.budget ? j.states / j.budget : null);
       dsatSetPhase('Mapping positions: ' + compact(j.states) + ' of a ' +
@@ -1549,7 +1543,33 @@
 
   /* --------------------------------------------------------------- render */
 
+  /*
+   * Long-running work belongs to the root it started on. Several places assign
+   * S.moves and only one of them is setMoves, so the check goes here, where
+   * every route that can change the position has to pass through it — the ones
+   * that exist and the ones added later.
+   *
+   * Left running, a search draws its candidate over a board it was not solved
+   * for, and Keep this diagram would import it. A dsat verdict is worse: a
+   * FOUND diagram fails the in-page check and reads as an engine fault, and an
+   * UNSAT reads as a claim about the position now on screen. Neither is
+   * recoverable once printed.
+   */
+  function cancelStaleWork() {
+    var rep = W.repString(S.moves);
+    if (S.dsat && S.dsat.rep !== rep) {
+      stopDsat();
+      dsatSetStatus('Stopped: the position changed while it was solving.', 'warn');
+    }
+    if (S.synth && S.synth.rep !== rep) {
+      stopSynth();
+      S.synth = null;
+      S.note = { text: 'The search stopped: the position changed under it.', cls: 'warn' };
+    }
+  }
+
   function render() {
+    cancelStaleWork();
     var v = view();
     lastView = v;
     var busy = !!(S.synth && S.synth.running);

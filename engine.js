@@ -202,9 +202,9 @@
   /*
    * "winner" is the player holding a four-in-a-row on the FINISHED board, or
    * 0. A steady-state root must have none: the game would already be over, and
-   * asking the agent to win from there is meaningless. An earlier version only
-   * looked for a win before the last ply, so a four delivered by the final move
-   * went unnoticed and such a root verified as a win in a single node.
+   * asking the agent to win from there is meaningless. The final move counts:
+   * a four delivered by the last ply is as final as any other, and a root that
+   * ends on one would otherwise verify as a win in a single node.
    */
   function boardFromMoves(moves) {
     var b = emptyBoard();

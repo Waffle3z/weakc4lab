@@ -102,8 +102,8 @@ for (let i = 0; i < Math.min(400, fx.decisions.length); i++) {
 let regressBad = 0;
 const ROWS6 = ['...@...', '...1...', '+@.2=..', '+!.1=..', '+1-2=..', '22-1=..'];
 const REGRESSIONS = [
-  // A present-but-malformed diagram used to be dropped in silence, so a
-  // truncated artifact imported as a success while keeping the old diagram.
+  // A present-but-malformed diagram must not be dropped in silence, or a
+  // truncated artifact imports as a success while keeping the old diagram.
   ['JSON with 5 diagram rows is rejected',
    () => !!W.parseImport(JSON.stringify({ rep: '44444221', diagram: ROWS6.slice(1) })).error],
   ['JSON with a non-array diagram is rejected',
