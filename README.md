@@ -74,10 +74,20 @@ case and is never approached by a real diagram.
 model is a candidate diagram; the verifier turns each losing line into a clause.
 The board shows the live candidate with its deepest counterexample behind it.
 
-It completes diagrams; it does not solve open roots. Four undecided cells finish
-in about 14 candidates, ten in about 120, twelve in about a thousand. The panel
-reports how many cells are undecided before you start and says plainly when the
-scope is past what it can finish.
+It completes diagrams; it does not solve open roots. Roughly, on a ply-16 root:
+four undecided cells finish in about 20 candidates, twelve in about 560, and
+fourteen in about 3,900. Past about fourteen it usually will not converge. The
+panel reports how many cells are undecided before you start and says plainly
+when the scope is wide.
+
+The saved phases are scrambled every 25 candidates. Phase saving otherwise
+makes each model a near neighbour of the last: measured, 59% of consecutive
+candidates differed in exactly one cell out of fourteen, so the search crawled
+through a neighbourhood while each clause it earned only ruled that
+neighbourhood out. Scrambling throws it elsewhere in the space, and on a
+ply-12 root with 14 undecided cells took the search from over fourteen minutes
+to about two and a half seconds. The interval barely matters, so it is
+diversification itself doing the work.
 
 **Share.** The URL carries the position and the diagram and updates as you
 edit.
@@ -315,21 +325,24 @@ run, by workload:
 
 | workload | SAT solve | exhaustive verify | clause build |
 |---|---:|---:|---:|
-| every cell undecided (6,988 candidates in 20 s) | **87.6%** | 2.9% | 9.5% |
-| 10 cells undecided on a ply-8 root (123 candidates) | 4.3% | **84.2%** | 11.5% |
-| 14 undecided on a ply-12 root (20,178 candidates in 120 s) | **91.1%** | 5.5% | 3.4% |
+| every cell undecided, ply 8 (8,919 candidates in 20 s, no solution) | **86.6%** | 4.7% | 8.7% |
+| 10 undecided on a ply-8 root (solved, 224 candidates in 0.8 s) | 2.8% | **91.3%** | 5.9% |
+| 14 undecided on a ply-12 root (solved, 3,417 candidates in 2.4 s) | 55.4% | 21.8% | 22.8% |
 
-The two have opposite bottlenecks. A faster SAT solver attacks 87.6% of the
-first and almost none of the second, where the verifier dominates and the whole
-run finishes in about 180 ms anyway.
+The bottleneck moves with the workload, and never sits somewhere a faster
+solver would pay off. It owns 86.6% of the first case, which is the one that
+does not finish anyway. It owns 2.8% of the second, where the verifier
+dominates and the whole run takes under a second regardless. Only the third
+splits its time, and even there the SAT half is barely more than the rest
+combined.
 
-So it would make a hopeless search fail faster rather than succeed. A cold
-ply-10 root ran 92,000 candidates without converging, and the deepest
-counterexample plateaued instead of trending toward a solution. The space is
-7^32 and each clause removes a vanishing slice of it, so a 10x throughput gain
-buys one digit against a gap of many orders of magnitude. The binding
-constraint is how little each counterexample rules out, which is a property of
-the encoding rather than of the language it runs in.
+So a faster solver would mostly make a hopeless search fail sooner. With every
+cell undecided the search ran 8,919 candidates in 20 seconds without
+converging, and the deepest counterexample plateaued rather than trending
+toward a solution. The space is 7^34 and each clause removes a vanishing slice
+of it, so a 10x throughput gain buys one digit against a gap of many orders of
+magnitude. The binding constraint is how little each counterexample rules out,
+which is a property of the encoding rather than of the language it runs in.
 
 That is why the panel reports how many cells are undecided before a search
 starts, and says plainly when the scope is too wide to expect a result. Leaving
@@ -375,8 +388,9 @@ partial diagram extends to a winning one, which is the question someone
 building a diagram by hand is actually asking.
 
 Until that happens, treat the in-page search as a diagram completer, not a
-solver: four free cells solve in about 14 candidates, twelve in about 1,000, and
-a cold ply-10 root does not converge at all.
+solver: on a ply-16 root, four undecided cells solve in about 20 candidates and
+twelve in about 560, while a root with everything undecided does not converge at
+all.
 
 An UNSAT verdict here is sound with respect to the clauses it accumulated, but
 it is not an audited impossibility proof, and it is bounded by whichever

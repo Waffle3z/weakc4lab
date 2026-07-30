@@ -92,6 +92,7 @@
     this.solver.ensureVars(this.cells.length * NM);
 
     this.iterations = 0;
+    this.jumps = 0;
     this.clausesAdded = 0;
     this.bestDepth = 0;
     this.history = [];          // counterexample depth per iteration
@@ -101,6 +102,25 @@
     this.status = 'running';
     this.detail = null;
     this.pinned = 0;
+
+    /*
+     * Phase saving makes each solve resume from the previous model and flip
+     * as little as possible. That is right for most incremental SAT, and
+     * wrong here: measured, 59% of consecutive candidates differed in exactly
+     * ONE cell out of fourteen, so the search crawls through a neighbourhood
+     * while every clause it earns only rules that neighbourhood out.
+     *
+     * Scrambling the saved phases periodically throws it somewhere else in
+     * the space. A ply-12 root with 14 undecided cells lands in 3.6 to 12.2
+     * seconds depending on the seed. The interval barely matters (10 to 200 all
+     * landed within noise of each other), which says the win is diversification
+     * itself rather than any particular cadence.
+     *
+     * Deterministic, so a search is reproducible and a failure can be
+     * chased. Set diversifyEvery to 0 to switch it off.
+     */
+    this.diversifyEvery = opts.diversifyEvery != null ? opts.diversifyEvery : 25;
+    this._rnd = 0x2545f491;
 
     this._encodeOneHot();
     this._encodeLocks(opts.locked || {});
@@ -275,9 +295,30 @@
 
   /* ------------------------------------------------------------ CEGIS step */
 
+  /* Deterministic LCG: reproducibility matters more than randomness here. */
+  Synth.prototype._next = function () {
+    this._rnd = (this._rnd * 1103515245 + 12345) & 0x7fffffff;
+    return this._rnd / 0x7fffffff;
+  };
+
+  /* Throw the saved phases somewhere else so the next model is not a
+   * neighbour of the last one. */
+  Synth.prototype.diversify = function () {
+    var ph = this.solver.phase;
+    for (var v = 0; v < ph.length; v++) ph[v] = this._next() < 0.5;
+    this.jumps++;
+  };
+
   /** One iteration. Returns a progress record; check `this.status`. */
   Synth.prototype.step = function () {
     if (this.status !== 'running') return this.progress();
+
+    /* Scramble before the solve, never after: addClause backtracks to level 0
+     * and cancelUntil saves the phase of every variable it unassigns, so a
+     * scramble later in the step is overwritten by the model that is about to
+     * be discarded anyway. */
+    if (this.diversifyEvery && this.iterations &&
+        this.iterations % this.diversifyEvery === 0) this.diversify();
 
     var verdict = this.solver.solve({ maxConflicts: this.satBudget });
     if (verdict === 'unsat') {
@@ -367,6 +408,7 @@
       conflicts: this.solver.conflicts,
       decisions: this.solver.decisions,
       vars: this.cells.length * NM,
+      jumps: this.jumps,
       freeCells: this.cells.length,
       candidate: this.candidate,
       lastLine: this.lastFails.length && deep ? deep.line : null,

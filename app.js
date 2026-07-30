@@ -1127,14 +1127,13 @@
     } else if (c.empty <= 8) {
       el.textContent = c.empty + ' of ' + c.total + ' cells undecided. Well inside range.';
     } else if (c.empty <= 12) {
-      el.textContent = c.empty + ' undecided. Expect hundreds to thousands of candidates.';
-    } else if (c.empty <= 16) {
-      /* 14 undecided on a ply-12 root took about fourteen minutes and did
-       * finish, so this is slow rather than hopeless. */
-      el.textContent = c.empty + ' undecided. Minutes, sometimes many.';
-      el.classList.add('warn');
+      el.textContent = c.empty + ' undecided. Usually a few hundred candidates.';
+    } else if (c.empty <= 15) {
+      /* 14 undecided lands in seconds on the roots measured, but the spread
+       * across seeds is wide, so the estimate is deliberately loose. */
+      el.textContent = c.empty + ' undecided. Seconds to a minute.';
     } else {
-      el.textContent = c.empty + ' undecided. Likely too wide to finish; ' +
+      el.textContent = c.empty + ' undecided. Past where this usually converges; ' +
         'decide a few more yourself.';
       el.classList.add('warn');
     }
