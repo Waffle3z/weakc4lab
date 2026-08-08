@@ -298,8 +298,11 @@
 
   /* Deterministic LCG: reproducibility matters more than randomness here. */
   Synth.prototype._next = function () {
-    this._rnd = (this._rnd * 1103515245 + 12345) & 0x7fffffff;
-    return this._rnd / 0x7fffffff;
+    /* Math.imul, not *: a 61-bit product rounds away exactly the low bits the
+     * state is built from, and the sequence stops being a full-period LCG. The
+     * output comes off the high bits, which are the ones an LCG randomises. */
+    this._rnd = (Math.imul(this._rnd, 1103515245) + 12345) | 0;
+    return ((this._rnd >>> 8) & 0xffffff) / 0x1000000;
   };
 
   /* Throw the saved phases somewhere else so the next model is not a

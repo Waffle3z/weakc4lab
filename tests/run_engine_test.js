@@ -80,15 +80,15 @@ const CASES = [
 ];
 
 /* The same arguments dsat.worker.js passes, so this tests what ships. */
-const ARGS = (rep) => [
+const ARGS = (rep, pin) => [
   'solve', '--rep', rep,
   '--direct-ply', String(Math.min(42, rep.length + 16)),
-  '--budget', '3000000',
+  '--budget', '2500000',
   '--expand-culprits', '300000',
   '--max-iters', '100000',
   '--max-seconds', '600',
   '--cex', '16'
-];
+].concat(pin ? ['--pin', pin] : []);
 
 function lastJson(lines) {
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -98,7 +98,7 @@ function lastJson(lines) {
   return null;
 }
 
-async function run(rep) {
+async function run(rep, pin) {
   const lines = [];
   const mod = await createDsat({
     noInitialRun: true,
@@ -106,7 +106,7 @@ async function run(rep) {
     printErr: (s) => lines.push(String(s))
   });
   // emscripten throws ExitStatus on a normal exit() as well as on abort.
-  try { mod.callMain(ARGS(rep)); } catch (_) { /* expected */ }
+  try { mod.callMain(ARGS(rep, pin)); } catch (_) { /* expected */ }
   return lastJson(lines);
 }
 
@@ -125,6 +125,32 @@ async function run(rep) {
       const diagram = j.diagram.map((r) => String(r).replace(/ /g, '.'));
       check(`node ${c.id}: diagram re-verified by engine.js`,
             W.verify(board, diagram, { budget: 5000000 }).win === true);
+
+      /*
+       * --pin is what makes the page's "only fill the undecided cells" true, so
+       * it is checked against a diagram we have just verified rather than a
+       * stored one. Undecide four cells, re-solve, and every cell we held must
+       * come back untouched; if the engine ignored the flag the page would
+       * silently overwrite the user's markers and call the result verified.
+       */
+      const flat = diagram.join('').split('');
+      let freed = 0;
+      const pin = flat.map((ch) => {
+        if (freed < 4 && !'12'.includes(ch)) { freed++; return '?'; }
+        return ch;
+      }).join('');
+      const jp = await run(c.rep, pin);
+      check(`node ${c.id}: still FOUND with ${freed} cells undecided`, jp && jp.status === 'FOUND',
+            jp && jp.status);
+      if (jp && jp.status === 'FOUND') {
+        const got2 = jp.diagram.map((r) => String(r).replace(/ /g, '.')).join('');
+        const kept = pin.split('').every((ch, i) => ch === '?' || got2[i] === ch);
+        check(`node ${c.id}: every pinned cell came back unchanged`, kept,
+              kept ? '' : `${pin} -> ${got2}`);
+        check(`node ${c.id}: the pinned completion verifies too`,
+              W.verify(board, jp.diagram.map((r) => String(r).replace(/ /g, '.')),
+                       { budget: 5000000 }).win === true);
+      }
     }
   }
 

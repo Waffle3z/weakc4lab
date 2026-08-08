@@ -6,10 +6,10 @@
  * pipeline runs on, not a reimplementation, so it cannot drift from it.
  * engine/PROVENANCE.json records exactly which source produced the artifact.
  *
- * Unlike the in-page CEGIS, this decides a whole ROOT: it either produces a
- * complete diagram or reports that none exists in the language. It takes no
- * account of markers already on the board, because dsat solves from the
- * position, not from a partial diagram.
+ * Like the in-page CEGIS it completes the undecided cells and keeps the rest
+ * (--pin below), but it gets there by deciding the whole game tree under the
+ * root at once instead of proposing a diagram and testing it. So its cost
+ * tracks the root's depth, not how much of the diagram is already decided.
  *
  * dsat reports everything as JSON on stdout already, so the worker just
  * forwards each line. Emscripten's in-memory filesystem covers its checkpoint

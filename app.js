@@ -1031,7 +1031,8 @@
      * the seed only biases the empty cells, and starting from what is on screen
      * is never worse than starting from nothing. */
     var payload = { cmd: 'start', moves: S.moves, seed: S.diagram, locked: locks };
-    S.synth = { running: true, p: null, rep: W.repString(S.moves) };
+    S.synth = { running: true, p: null, rep: W.repString(S.moves),
+                diag: S.diagram.join('') };
     try {
       synthWorker = new Worker('synth.worker.js');
       synthWorker.onmessage = function (e) {
@@ -1048,12 +1049,14 @@
         } else renderSoon();   // coalesce to at most one repaint per frame
       };
       synthWorker.onerror = function (err) {
-        S.synth = { running: false, p: { status: 'error', detail: 'worker failed: ' + (err.message || 'unknown') } };
+        S.synth = { running: false, rep: W.repString(S.moves), diag: S.diagram.join(''),
+                    p: { status: 'error', detail: 'worker failed: ' + (err.message || 'unknown') } };
         render();
       };
       synthWorker.postMessage(payload);
     } catch (e) {
-      S.synth = { running: false, p: { status: 'error', detail: String(e.message || e) } };
+      S.synth = { running: false, rep: W.repString(S.moves), diag: S.diagram.join(''),
+                  p: { status: 'error', detail: String(e.message || e) } };
     }
     render();
   }
@@ -1097,8 +1100,9 @@
 
   /*
    * Measured difficulty by number of undecided cells on this root, so nobody
-   * starts a search that cannot finish and waits on it. 4 free cells land in
-   * ~14 candidates, 10 in ~120, 12 in ~1000; a cold 32-cell root ran 92,000
+   * starts a search that cannot finish and waits on it. On a ply-16 root, 4
+   * undecided cells land in ~20 candidates, 12 in ~560, 14 in ~3,900; a cold
+   * root with everything undecided ran 8,919
    * candidates without converging. The limit is how little each counterexample
    * clause rules out (~120 literals of 224), not throughput, so leaving it
    * running does not help.
@@ -1119,7 +1123,7 @@
       el.textContent = c.empty + ' of ' + c.total + ' cells undecided. Well inside range.';
     } else if (c.empty <= 12) {
       el.textContent = c.empty + ' undecided. Usually a few hundred candidates.';
-    } else if (c.empty <= 15) {
+    } else if (c.empty <= 14) {
       /* 14 undecided lands in seconds on the roots measured, but the spread
        * across seeds is wide, so the estimate is deliberately loose. */
       el.textContent = c.empty + ' undecided. Seconds to a minute.';
@@ -1233,9 +1237,10 @@
    * research pipeline runs on, so it cannot drift from it, and it measures
    * within ~1.2x of it. See engine/PROVENANCE.json for what this was built from.
    *
-   * It decides a whole ROOT rather than filling cells: either a complete
-   * diagram or no diagram exists. It ignores whatever is on the board, because
-   * dsat solves from the position, not from a partial diagram. Loaded on
+   * It fills the undecided cells like auto-complete does, but by deciding the
+   * whole game tree under the root at once rather than proposing a diagram and
+   * testing it. Its cost therefore tracks the root's depth and not how much you
+   * have decided, which is the opposite of auto-complete. Loaded on
    * demand, since it is a megabyte.
    */
   /* One worker per run, terminated when it finishes.
@@ -1325,6 +1330,7 @@
     var scope = emptyCellCount();
     S.dsat = { running: true, t0: Date.now(), rep: W.repString(S.moves),
                cutPly: Math.min(COLS * ROWS, ply + 16),
+               diag: S.diagram.join(''),
                pinned: scope.total - scope.empty };
     dsatSetStatus(dsatBinary ? 'Starting the engine...' : 'Fetching the engine...');
     render();
@@ -1364,12 +1370,14 @@
        */
       pin: S.diagram.join(''),
       /*
-       * About 1.2 KB of clause database per counted state, so 30M -- what this
-       * used to ask for -- implies some 36 GB and wasm dies at 4. The budget is
-       * meant to be the graceful failure, and at that size the engine reached
-       * an out-of-memory abort long before it ever tripped.
+       * The budget exists so an oversized root fails with a message instead of
+       * an out-of-memory abort, which means it has to bite below the wasm32
+       * ceiling. Measured at about 1.2 KB of clause database per counted state:
+       * 2.5M is roughly 3 GB against a 4 GiB limit, leaving room for the rest
+       * of the heap. It is a floor on what gets refused, not a promise -- the
+       * ratio is one root's measurement, not a law.
        */
-      budget: 3000000,
+      budget: 2500000,
       expand: 300000,
       maxIters: 100000,
       maxSeconds: 180
@@ -1518,7 +1526,7 @@
   function finishDsat(ms) {
     if (!S.dsat) return;
     var el = $('dsat-status');
-    if (!el.textContent || /^Searching|^Encoded|^Fetching|^Compiling|^Starting/.test(el.textContent)) {
+    if (!el.textContent || /^Searching|^Encoded|^Fetching|^Compiling|^Starting|^Mapping|^Mapped/.test(el.textContent)) {
       dsatSetStatus('Stopped after ' + (ms / 1000).toFixed(1) + ' s with no verdict.', 'warn');
     }
     stopDsat();
@@ -1579,15 +1587,32 @@
    * recoverable once printed.
    */
   function cancelStaleWork() {
-    var rep = W.repString(S.moves);
-    if (S.dsat && S.dsat.rep !== rep) {
+    var rep = W.repString(S.moves), diag = S.diagram.join('');
+    /*
+     * The diagram is half the question now: both searches are handed the
+     * decided cells and only fill in the rest, so editing a marker mid-run
+     * invalidates the answer exactly as changing the position does. Without
+     * this, a run started before the edit would come back, replace the whole
+     * diagram with a completion of the OLD decided cells, and report it as
+     * verified -- silently discarding the edit.
+     *
+     * A missing tag counts as current, not stale: an error record carries no
+     * root, and cancelling it would replace the real message with a false one.
+     */
+    if (S.dsat && S.dsat.rep != null && (S.dsat.rep !== rep || S.dsat.diag !== diag)) {
+      var posChanged = S.dsat.rep !== rep;
       stopDsat();
-      dsatSetStatus('Stopped: the position changed while it was solving.', 'warn');
+      dsatSetStatus(posChanged
+        ? 'Stopped: the position changed while it was solving.'
+        : 'Stopped: the diagram changed while it was solving.', 'warn');
     }
-    if (S.synth && S.synth.rep !== rep) {
+    if (S.synth && S.synth.rep != null && (S.synth.rep !== rep || S.synth.diag !== diag)) {
+      var posMoved = S.synth.rep !== rep;
       stopSynth();
       S.synth = null;
-      S.note = { text: 'The search stopped: the position changed under it.', cls: 'warn' };
+      S.note = { text: posMoved
+        ? 'The search stopped: the position changed under it.'
+        : 'The search stopped: the diagram changed under it.', cls: 'warn' };
     }
   }
 

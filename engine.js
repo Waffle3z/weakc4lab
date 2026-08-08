@@ -676,22 +676,47 @@
       return out;
     }
 
-    var pass = scan(false);
-    if (pass.error) return { error: pass.error };
-    if (pass.gridLines.length > 0 && pass.gridLines.length < ROWS) {
-      var retry = scan(true);
-      if (!retry.error && retry.gridLines.length === ROWS) pass = retry;
+    /* Resolve one scan into a rep and/or a diagram, or say why it cannot. */
+    function interpret(pass) {
+      if (pass.error) return { error: pass.error };
+      var g = pass.gridLines, r = pass.rep;
+      if (g.length === ROWS) return { rep: r, diagram: g, error: null };
+      if (g.length === 1 && r === null && /^[1-7]{2,}$/.test(g[0].trim())) {
+        // The deferred ambiguous case: one line, all digits, no other rows. A
+        // diagram never arrives one row at a time, so it was a rep.
+        return { rep: g[0].trim(), diagram: null, error: null };
+      }
+      if (g.length > 0) return { error: 'found ' + g.length + ' diagram rows, need ' + ROWS };
+      if (r === null) return { error: 'nothing recognisable found' };
+      return { rep: r, diagram: null, error: null };
     }
-    rep = pass.rep;
-    var gridLines = pass.gridLines;
-    if (gridLines.length === ROWS) diagram = gridLines;
-    else if (gridLines.length === 1 && rep === null && /^[1-7]{2,}$/.test(gridLines[0].trim())) {
-      // The deferred ambiguous case: one line, all digits, no other rows. A
-      // diagram never arrives one row at a time, so it was a rep.
-      rep = gridLines[0].trim();
+
+    /*
+     * Read it strictly first, and reach for the second interpretation only if
+     * that fails outright. Trying the looser one whenever the row count was
+     * short could overturn input the strict pass had already resolved: seven
+     * digits followed by five empty lines is a rep, and reading those lines as
+     * rows turns it into a diagram of floating stones.
+     *
+     * What the fallback is for: a row of nothing but claimeven is seven spaces,
+     * so an editor that strips trailing whitespace leaves an empty line, and
+     * upstream diagrams are mostly such rows. It is still a guess -- five real
+     * rows plus a stray blank line is equally a six-row diagram -- so when it
+     * fires it says so rather than passing off a reconstruction as what you
+     * pasted.
+     */
+    var read = interpret(scan(false));
+    if (read.error) {
+      var loose = interpret(scan(true));
+      if (loose.error) return { error: read.error };   // the strict complaint is the useful one
+      var filled = lines.filter(function (l) { return l.replace(/\r$/, '').length === 0; }).length;
+      warnings.push(filled + ' empty line' + (filled === 1 ? '' : 's') +
+                    ' read as ' + (filled === 1 ? 'a row' : 'rows') +
+                    ' of claimeven; check the diagram is what you meant');
+      read = loose;
     }
-    else if (gridLines.length > 0) return { error: 'found ' + gridLines.length + ' diagram rows, need ' + ROWS };
-    if (rep === null && diagram === null) return { error: 'nothing recognisable found' };
+    rep = read.rep;
+    diagram = read.diagram;
     return finish();
 
     function finish() {

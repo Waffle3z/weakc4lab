@@ -99,10 +99,13 @@ CaDiCaL, compiled to WebAssembly. It is the same source the native tooling runs,
 not a reimplementation, so it cannot drift from it. It is loaded on demand,
 because it is about a megabyte.
 
-This is a different operation from auto-complete. It decides a whole **root**:
-either a complete diagram, or no diagram exists in the strict language. It
-ignores whatever markers are on the board, because dsat solves from the
-position rather than from a partial diagram.
+This is a different operation from auto-complete, though it answers the same
+question: it holds your decided cells fixed and completes the rest. What differs
+is the method. dsat maps out every position the diagram could ever face and
+decides them together, rather than proposing a diagram and testing it, so its
+size is set by the game tree while auto-complete's is set by the markers.
+Undecide everything and its UNSAT is about the root itself, across the whole
+strict language.
 
 Whatever it returns is re-verified by the in-page verifier before being
 accepted, so a diagram is only kept if two independent implementations agree.
