@@ -19,8 +19,9 @@
    * coordinates and invite the wrong one. */
   function colName(x) { return String(x + 1); }
 
-  /* '.' is the on-disk spelling of claimeven; on screen it is blank. '?' is
-   * an undecided cell and IS drawn, because it is a thing you must resolve. */
+  /* Claimeven is blank on screen, a space on the way out (W.toWire) and '.'
+   * in memory. '?' is an undecided cell and IS drawn, because it is a thing
+   * you must resolve. */
   function glyphFor(ch) { return (ch === '.' || ch === ' ') ? '' : ch; }
 
   function holeCount() { return W.countHoles(S.diagram); }
@@ -1839,7 +1840,7 @@
       var holes = holeCount();
       $('io-text').value = '{\n  "rep": ' + JSON.stringify(W.repString(S.moves)) +
         ',\n  "diagram": [\n' +
-        S.diagram.map(function (r) { return '    ' + JSON.stringify(r); }).join(',\n') +
+        W.toWire(S.diagram).map(function (r) { return '    ' + JSON.stringify(r); }).join(',\n') +
         '\n  ],\n  "semantics": ' + JSON.stringify(holes ? 'incomplete' : 'strict-original') +
         (holes ? ',\n  "undecided": ' + holes : '') + '\n}';
       setIoNote(holes
@@ -1848,8 +1849,9 @@
     };
 
     $('btn-export-grid').onclick = function () {
-      $('io-text').value = W.diagramText(S.diagram);
-      setIoNote('Diagram grid written above. Empty cells are written as a dot on disk.', 'ok');
+      $('io-text').value = W.diagramText(W.toWire(S.diagram));
+      setIoNote('Diagram grid written above. Claimeven is written as a space, ' +
+                'so a row of them looks empty.', 'ok');
     };
 
     $('btn-copy-link').onclick = function () {

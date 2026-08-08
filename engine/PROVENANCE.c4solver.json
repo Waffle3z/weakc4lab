@@ -7,11 +7,11 @@
     "Rebuild: bash tools/build_c4solver_wasm.sh 7 6"
   ],
   "board": "7x6",
-  "built": "2026-07-29",
+  "built": "2026-08-08",
   "source": {
-    "cpp/c4solver_wasm.cpp": "8902de835d03081361e77f59827c244b9c86c0d5c5c3fc3ad493540e4fe6aad2",
-    "cpp/solver.hpp": "553b438cded5141b2417d07c5ea3c988c43114e2108dea17d0e3684248bb9bd5",
-    "cpp/c4.hpp": "2d6af9ba7f8e648abc7933c99dab39f7e6f3c7de75f577dc5ab3a540715aefbd"
+    "cpp/c4solver_wasm.cpp": "ecb2fd60f5b8776c5e3fd3c016e9015f907127815bf64fe06f13580eadb5e01b",
+    "cpp/solver.hpp": "60e400eba256ed2faa74e0104f5041e89356228e4a83d289e22c691d573a52c3",
+    "cpp/c4.hpp": "1e09edb923f0909d76ef37b5ac2b31ca10b8b8737d3594ed6a02a48179cb2f60"
   },
   "emscripten": "6.0.4",
   "tt_bits": 22,
@@ -20,7 +20,7 @@
     "link": "-O2 -sMODULARIZE=1 -sEXPORT_NAME=createC4Solver -sEXIT_RUNTIME=0 -sFILESYSTEM=0 -sALLOW_MEMORY_GROWTH=1"
   },
   "artifacts": {
-    "c4solver_7x6.js": "cd2cb26ac10d8f6030768dac5a0788bb73e950b39071b6ab6dab78edafe3d4dc",
-    "c4solver_7x6.wasm": "2d3ae854ac1d3428fcdfe3bd67a4d9cc766fff298035ae63c6ca1d4db28633ae"
+    "c4solver_7x6.js": "148bf8b7353e997cc69509e4cf41e1c27add56a55820651624278a6969965899",
+    "c4solver_7x6.wasm": "fdc0ca098066a277c3b760d60325955e5a3078b5709d444039943d1eae6a470f"
   }
 }

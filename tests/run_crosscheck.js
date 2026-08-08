@@ -101,6 +101,7 @@ for (let i = 0; i < Math.min(400, fx.decisions.length); i++) {
 // catch any of these.
 let regressBad = 0;
 const ROWS6 = ['...@...', '...1...', '+@.2=..', '+!.1=..', '+1-2=..', '22-1=..'];
+const UPSTREAM_ROWS = ['       ', '       ', '       ', '       ', '2      ', '2 !11  '];
 const REGRESSIONS = [
   // A present-but-malformed diagram must not be dropped in silence, or a
   // truncated artifact imports as a success while keeping the old diagram.
@@ -110,6 +111,33 @@ const REGRESSIONS = [
    () => !!W.parseImport('{"rep":"44444221","diagram":"nope"}').error],
   ['JSON with a good diagram still loads',
    () => W.parseImport(JSON.stringify({ rep: '44444221', diagram: ROWS6 })).diagram !== null],
+
+  /*
+   * Claimeven is a space upstream (solution/validate_solution.py: CLAIMEVEN = " ")
+   * and a '.' in memory here, so the two spellings have to stay interchangeable
+   * in both directions. UPSTREAM_ROWS is copied verbatim out of upstream's
+   * steady_states.json, blank rows and all.
+   */
+  ['export spells claimeven as a space',
+   () => W.toWire(['...@...', '...1...', '+@.2=..', '+!.1=..', '+1-2=..', '22-1=..'])[0] === '   @   '],
+  ['an upstream diagram imports unchanged',
+   () => W.parseImport(JSON.stringify({ diagram: UPSTREAM_ROWS })).diagram
+           .join('|') === UPSTREAM_ROWS.map((r) => r.replace(/ /g, '.')).join('|')],
+  ['and survives the round trip back out',
+   () => W.toWire(W.parseImport(JSON.stringify({ diagram: UPSTREAM_ROWS })).diagram)
+           .join('|') === UPSTREAM_ROWS.join('|')],
+  /* A row of nothing but claimeven is seven spaces, so any editor that strips
+   * trailing whitespace hands back an empty line. Upstream diagrams are mostly
+   * such rows, and dropping them used to fail as "found 4 rows, need 6". */
+  ['blank rows stripped to empty lines still import',
+   () => W.parseImport(UPSTREAM_ROWS.map((r) => r.replace(/\s+$/, '')).join('\n')).diagram
+           .join('|') === UPSTREAM_ROWS.map((r) => r.replace(/ /g, '.')).join('|')],
+  ['the same with a trailing newline',
+   () => W.parseImport(UPSTREAM_ROWS.map((r) => r.replace(/\s+$/, '')).join('\n') + '\n').diagram
+           .join('|') === UPSTREAM_ROWS.map((r) => r.replace(/ /g, '.')).join('|')],
+  /* The fallback must not reinterpret input that already read cleanly. */
+  ['a rep with blank lines round it is still a rep',
+   () => W.parseImport('\n4444\n\n').moves.join('') === '4444'],
   // Seven digits drawn only from columns 1 and 2 are also a legal row of
   // stones. One such line with no other rows is a rep, not a diagram.
   ['a 7-move rep of columns 1 and 2 loads as a rep',

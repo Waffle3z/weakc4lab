@@ -40,7 +40,7 @@ stone played after the root.
 
 `?` means undecided. It is a tool-level symbol, not an eighth marker category:
 the language has seven markers and every one of them means something, so there
-is no value that reads as "unset" (`.` is claimeven, not blank). Auto-complete
+is no value that reads as "unset" (a blank cell is claimeven, not undecided). Auto-complete
 fills exactly the undecided cells and treats every other marker as fixed. A
 diagram containing one is incomplete and gets no verification verdict.
 
@@ -212,7 +212,7 @@ to right.
 |---|---|---|
 | `!` | urgent | always |
 | `@` | miai | only when exactly one is exposed |
-| `.` | claimeven | even rows (2, 4, 6). Drawn as an empty cell; the dot is only the on-disk spelling |
+| space | claimeven | even rows (2, 4, 6). Drawn as an empty cell, and written as a space, which is what upstream WeakC4 uses. A `.` is accepted on import for older files |
 | `\|` | claimodd | odd rows (1, 3, 5) |
 | `+` | plus | always |
 | `=` | equal | always |

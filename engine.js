@@ -36,7 +36,7 @@
   var MARKERS = [
     { ch: '!', name: 'urgent',    level: 'urgent', desc: 'Play here first.' },
     { ch: '@', name: 'miai',      level: 'miai',   desc: 'Paired cell; fires only when exactly one miai is exposed.' },
-    { ch: '.', name: 'claimeven', level: 'claim',  desc: 'Fires on even rows (2, 4, 6). Inert on odd rows.' },
+    { ch: '.', name: 'claimeven', level: 'claim',  desc: 'Fires on even rows (2, 4, 6). Inert on odd rows. Written as a space.' },
     { ch: '|', name: 'claimodd',  level: 'claim',  desc: 'Fires on odd rows (1, 3, 5). Inert on even rows.' },
     { ch: '+', name: 'plus',      level: 'plus',   desc: 'Low priority.' },
     { ch: '=', name: 'equal',     level: 'equal',  desc: 'Lower priority.' },
@@ -525,6 +525,21 @@
     return { diagram: out, changed: changed };
   }
 
+  /*
+   * Upstream spells claimeven as a space -- solution/validate_solution.py has
+   * CLAIMEVEN = " " and steady_states.json contains no dots at all -- so a
+   * space is what leaves this page, and a diagram exported here pastes
+   * straight into the solution.
+   *
+   * '.' remains the spelling in memory, in the share link and in the tests,
+   * because a dot is visible in source and in a diff where a run of spaces is
+   * not. parseImport accepts either, so links and files written before this
+   * still load.
+   */
+  function toWire(diagram) {
+    return diagram.map(function (r) { return r.replace(/\./g, ' '); });
+  }
+
   function diagramText(diagram) {
     return diagram.join('\n');
   }
@@ -614,32 +629,61 @@
      * Only JSON-array decoration (quotes, trailing comma) is removed.
      */
     var lines = text.split(/\r?\n/);
-    var gridLines = [];
+    /* A trailing newline terminates the last line, it does not begin another. */
+    if (lines.length && lines[lines.length - 1] === '') lines.pop();
     var GRID_ROW = /^[!@.|?+=\-12 ]*$/;
-    for (var i = 0; i < lines.length; i++) {
-      var raw = lines[i].replace(/\r$/, '');
-      var quoted = raw.match(/^\s*"(.*)"\s*,?\s*$/);
-      var line = quoted ? quoted[1] : raw;
 
-      if (line.length === 0) continue;                 // blank line, or trailing newline
-      var trimmed = line.trim();
+    /*
+     * blankIsRow decides what an empty line means, and it is genuinely
+     * ambiguous: a row of nothing but claimeven is seven spaces, so any editor
+     * that strips trailing whitespace turns it into an empty line -- and
+     * upstream diagrams are mostly such rows. Read it strictly first, and only
+     * if that comes up short does the second pass treat blanks as rows. A
+     * reading is accepted only when it lands on exactly ROWS, so the fallback
+     * can rescue input that would otherwise fail and can never reinterpret
+     * input that already parsed.
+     */
+    function scan(blankIsRow) {
+      var out = { rep: null, gridLines: [], error: null };
+      for (var i = 0; i < lines.length; i++) {
+        var raw = lines[i].replace(/\r$/, '');
+        var quoted = raw.match(/^\s*"(.*)"\s*,?\s*$/);
+        var line = quoted ? quoted[1] : raw;
 
-      /* A 7-character run of digits is ambiguous: "1211212" is both a legal
-       * seven-move rep and a legal row of stones. Defer it rather than guess
-       * here; a real grid brings five more rows with it, and the count below
-       * settles which it was. */
-      if (/^[1-7]{2,}$/.test(trimmed) && trimmed.length !== COLS && trimmed === line) {
-        rep = trimmed;
-        continue;
+        if (line.length === 0) {
+          if (blankIsRow) out.gridLines.push(' '.repeat(COLS));
+          continue;
+        }
+        var trimmed = line.trim();
+
+        /* A 7-character run of digits is ambiguous: "1211212" is both a legal
+         * seven-move rep and a legal row of stones. Defer it rather than guess
+         * here; a real grid brings five more rows with it, and the count below
+         * settles which it was. */
+        if (/^[1-7]{2,}$/.test(trimmed) && trimmed.length !== COLS && trimmed === line) {
+          out.rep = trimmed;
+          continue;
+        }
+        if (line.length <= COLS && GRID_ROW.test(line)) {
+          out.gridLines.push(line.length < COLS ? line + ' '.repeat(COLS - line.length) : line);
+        } else if (/^[1-7]+$/.test(trimmed)) {
+          out.rep = trimmed;
+        } else {
+          out.error = 'unrecognised line: "' + line + '"';
+          return out;
+        }
       }
-      if (line.length <= COLS && GRID_ROW.test(line)) {
-        gridLines.push(line.length < COLS ? line + ' '.repeat(COLS - line.length) : line);
-      } else if (/^[1-7]+$/.test(trimmed)) {
-        rep = trimmed;
-      } else {
-        return { error: 'unrecognised line: "' + line + '"' };
-      }
+      return out;
     }
+
+    var pass = scan(false);
+    if (pass.error) return { error: pass.error };
+    if (pass.gridLines.length > 0 && pass.gridLines.length < ROWS) {
+      var retry = scan(true);
+      if (!retry.error && retry.gridLines.length === ROWS) pass = retry;
+    }
+    rep = pass.rep;
+    var gridLines = pass.gridLines;
     if (gridLines.length === ROWS) diagram = gridLines;
     else if (gridLines.length === 1 && rep === null && /^[1-7]{2,}$/.test(gridLines[0].trim())) {
       // The deferred ambiguous case: one line, all digits, no other rows. A
@@ -764,7 +808,8 @@
     parseRep: parseRep, boardFromMoves: boardFromMoves, repString: repString,
     decide: decide, verify: verify, replay: replay, decisionsAlongLine: decisionsAlongLine,
     blankDiagram: blankDiagram, setCell: setCell,
-    syncDiagramToBoard: syncDiagramToBoard, diagramText: diagramText, freeCells: freeCells,
+    syncDiagramToBoard: syncDiagramToBoard, diagramText: diagramText, toWire: toWire,
+    freeCells: freeCells,
     encodeDiagram: encodeDiagram, decodeDiagram: decodeDiagram,
     parseImport: parseImport, movesFromDiagram: movesFromDiagram
   };
