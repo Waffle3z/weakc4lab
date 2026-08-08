@@ -7,11 +7,11 @@
     "Rebuild: bash tools/build_wasm.sh 7 6"
   ],
   "board": "7x6",
-  "built": "2026-07-29",
+  "built": "2026-08-08",
   "source": {
-    "cpp/dsat.cpp": "b7597bfb3bb02b91593ea4de96744ce689f6e8caabb13f8ceefbe945cabda1ee",
-    "cpp/c4.hpp": "2d6af9ba7f8e648abc7933c99dab39f7e6f3c7de75f577dc5ab3a540715aefbd",
-    "cpp/solver.hpp": "553b438cded5141b2417d07c5ea3c988c43114e2108dea17d0e3684248bb9bd5"
+    "cpp/dsat.cpp": "63a69fcd1f883b3789db42ab5ece123f46af5c0b22b6b1879426962c094d3a6e",
+    "cpp/c4.hpp": "1e09edb923f0909d76ef37b5ac2b31ca10b8b8737d3594ed6a02a48179cb2f60",
+    "cpp/solver.hpp": "60e400eba256ed2faa74e0104f5041e89356228e4a83d289e22c691d573a52c3"
   },
   "cadical": {
     "version": "rel-3.0.1",
@@ -25,6 +25,6 @@
   },
   "artifacts": {
     "dsat_7x6.js": "a1ecb89cea8b5a668d721610f25a9d3d47987cb31848443889f2c7bbe7b6d65c",
-    "dsat_7x6.wasm": "7aebce0a6a04210c67fcf67c0e9686e62b16e6d428b46b7704964e3f979ed714"
+    "dsat_7x6.wasm": "a9b2348033f633e5578fc14fd38cac4ae2ee14b41202cc4c97ec365c32928fce"
   }
 }
