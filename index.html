@@ -145,18 +145,24 @@
         </p>
         <p>
           <strong>It completes diagrams; it does not solve open roots.</strong>
-          Four free cells finish in about 14 candidates, ten in about 120, twelve
-          in about a thousand. A bare root with everything free ran 92,000
-          candidates without converging, and a faster solver would not change
-          that: the limit is how little each counterexample rules out, not
-          throughput. Because your markers bound the search, an UNSAT here means
-          no completion of <em>those</em> markers wins, not that the root is
-          impossible.
+          On a ply-16 root, four undecided cells finish in about 20 candidates,
+          twelve in about 560 and fourteen in about 3,900; past about fourteen it
+          usually will not converge. A bare root with everything undecided ran
+          8,919 candidates in 20 seconds without getting there, and a faster
+          solver would not change that: the limit is how little each
+          counterexample rules out, not throughput. Because your markers bound
+          the search, an UNSAT here means no completion of <em>those</em> markers
+          wins, not that the root is impossible.
         </p>
         <p>
-          <strong>Solve whole root</strong> is the native engine, and it ignores
-          the markers on screen: it solves from the position and replaces the
-          whole diagram if it finds one. Its UNSAT is about the root itself,
+          <strong>Solve whole root</strong> is the native engine. It holds your
+          decided cells fixed too, so it also only fills in the undecided ones,
+          but it goes about it in a completely different way: it maps out every
+          position the diagram could ever face and decides them together, rather
+          than proposing a diagram and testing it. That makes it strong exactly
+          where auto-complete is weak &mdash; a deep root with little decided
+          &mdash; and useless on a shallow one, where the map is too big for a
+          browser. Undecide everything and its UNSAT is about the root itself,
           across the entire strict language. Neither verdict has been
           independently audited.
         </p>

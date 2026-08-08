@@ -1322,8 +1322,10 @@
   function startDsat() {
     if (!redToMoveAtRoot() || S.dsat) return;
     var ply = S.moves.length;
+    var scope = emptyCellCount();
     S.dsat = { running: true, t0: Date.now(), rep: W.repString(S.moves),
-               cutPly: Math.min(COLS * ROWS, ply + 16) };
+               cutPly: Math.min(COLS * ROWS, ply + 16),
+               pinned: scope.total - scope.empty };
     dsatSetStatus(dsatBinary ? 'Starting the engine...' : 'Fetching the engine...');
     render();
 
@@ -1354,7 +1356,20 @@
       rep: W.repString(S.moves),
       // dsat_campaign.py's measured sweet spot: encode plies [root, root+16).
       cutPly: S.dsat.cutPly,
-      budget: 30000000,
+      /*
+       * Every decided cell is pinned, so a run can only fill in what you left
+       * undecided. Without this the engine answered a question nobody asked:
+       * it replaced the whole diagram, discarding the markers on screen.
+       * A board with nothing decided pins nothing and behaves as it always did.
+       */
+      pin: S.diagram.join(''),
+      /*
+       * About 1.2 KB of clause database per counted state, so 30M -- what this
+       * used to ask for -- implies some 36 GB and wasm dies at 4. The budget is
+       * meant to be the graceful failure, and at that size the engine reached
+       * an out-of-memory abort long before it ever tripped.
+       */
+      budget: 3000000,
       expand: 300000,
       maxIters: 100000,
       maxSeconds: 180
@@ -1447,8 +1462,15 @@
       return;
     }
     if (j.status === 'UNSAT') {
-      dsatSetStatus('UNSAT: no diagram exists for this root in the strict language. ' +
-                    'Sound, but not independently audited.', 'warn');
+      /* Pinned cells narrow the claim, and saying the wider one would be
+       * false: the root may well be winnable by a diagram that contradicts
+       * something you have set. */
+      dsatSetStatus(S.dsat && S.dsat.pinned
+        ? 'UNSAT: no diagram that keeps your ' + S.dsat.pinned + ' decided cell' +
+          (S.dsat.pinned === 1 ? '' : 's') + ' wins this root. Undecide all and ' +
+          'solve again to ask about the root itself. Sound, but not independently audited.'
+        : 'UNSAT: no diagram exists for this root in the strict language. ' +
+          'Sound, but not independently audited.', 'warn');
       return;
     }
     if (j.status === 'TIME_LIMIT') {

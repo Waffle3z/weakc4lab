@@ -164,6 +164,10 @@ self.onmessage = function (e) {
       '--progress-every', '0.4',
       '--checkpoint', '/ck.jsonl'
     ];
+    /* Hard units on every decided cell, so the run can only fill in what the
+     * page left undecided. A board with nothing decided sends all '?' and the
+     * engine pins nothing, which is the behaviour this always had. */
+    if (msg.pin) args.push('--pin', msg.pin);
     try {
       mod.callMain(args);
     } catch (err) {

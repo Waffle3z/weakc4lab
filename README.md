@@ -405,10 +405,12 @@ Cost is a function of depth: about **5 ms** per weak solve at ply 12 and beyond,
 against 2.5 minutes from the empty board. Nothing in the page loads it; the
 test suite is what exercises it.
 
-*Solve whole root* is not a substitute for the in-page search. dsat solves from
-the position and ignores the markers on screen, so it cannot answer whether a
-particular partial diagram extends to a winning one, which is the question
-someone building a diagram by hand is actually asking.
+Both searches now answer the same question &mdash; complete the undecided cells,
+keep the rest &mdash; and differ in how. dsat pins the decided cells as unit
+clauses, which costs it nothing: its size is set by the game tree, and the
+markers do not constrain the game tree. The in-page search encodes only the
+markers, so every cell you decide makes its problem smaller. That is why the
+choice between them is really a question about the root, not about the diagram.
 
 So treat the in-page search as a diagram completer, not a solver: on a ply-16
 root, four undecided cells solve in about 20 candidates and twelve in about 560,

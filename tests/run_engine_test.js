@@ -83,7 +83,7 @@ const CASES = [
 const ARGS = (rep) => [
   'solve', '--rep', rep,
   '--direct-ply', String(Math.min(42, rep.length + 16)),
-  '--budget', '30000000',
+  '--budget', '3000000',
   '--expand-culprits', '300000',
   '--max-iters', '100000',
   '--max-seconds', '600',
